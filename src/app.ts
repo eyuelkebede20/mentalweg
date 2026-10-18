@@ -6,6 +6,7 @@ import { env } from './env';
 import { authRoutes } from './routes/auth';
 import { adminRoutes } from './routes/admin';
 import { publicRoutes } from './routes/public';
+import { getAppVersionInfo } from './utils/version';
 
 export async function buildApp() {
   const app = Fastify({
@@ -25,9 +26,21 @@ export async function buildApp() {
   app.register(adminRoutes);
   app.register(publicRoutes);
 
+  // Version metadata route
+  app.get('/api/version', async () => {
+    return getAppVersionInfo();
+  });
+
   // Health check route
   app.get('/health', async () => {
-    return { status: 'ok' };
+    const v = getAppVersionInfo();
+    return {
+      status: 'ok',
+      version: v.version,
+      commit: v.gitCommit,
+      branch: v.gitBranch,
+      timestamp: new Date().toISOString(),
+    };
   });
 
   // Serve uploads
@@ -50,13 +63,26 @@ export async function buildApp() {
     });
   }
   
+  // Redirect common typo /amdin -> /admin/
+  app.get('/amdin', async (req, reply) => {
+    return reply.redirect('/admin/');
+  });
+  app.get('/amdin/', async (req, reply) => {
+    return reply.redirect('/admin/');
+  });
+  app.get('/amdin/*', async (req, reply) => {
+    const target = (req.raw.url || '').replace(/^\/amdin/, '/admin');
+    return reply.redirect(target.startsWith('/admin') ? target : '/admin/');
+  });
+
+  // Redirect /admin -> /admin/
+  app.get('/admin', async (req, reply) => {
+    return reply.redirect('/admin/');
+  });
+
   // Serve admin app
   const adminDist = path.join(__dirname, '../admin/dist');
   if (fs.existsSync(adminDist)) {
-    app.get('/admin', async (req, reply) => {
-      return reply.redirect('/admin/');
-    });
-
     app.register(require('@fastify/static'), {
       root: adminDist,
       prefix: '/admin/',
@@ -67,12 +93,22 @@ export async function buildApp() {
   // SPA fallback for non-API routes
   app.setNotFoundHandler(async (req, reply) => {
     const url = req.raw.url || '';
+
+    // Handle common typo /amdin
+    if (url.startsWith('/amdin')) {
+      const target = url.replace(/^\/amdin/, '/admin');
+      return reply.redirect(target.startsWith('/admin') ? target : '/admin/');
+    }
+
     if (url.startsWith('/admin')) {
       const adminIndex = path.join(__dirname, '../admin/dist/index.html');
       if (fs.existsSync(adminIndex)) {
         reply.type('text/html');
         return fs.createReadStream(adminIndex);
       }
+      return reply.status(503).send({
+        error: 'Admin application not built. Run "npm run build --prefix admin" or access the admin dev server at http://localhost:5174/admin/.'
+      });
     }
 
     if (!url.startsWith('/api') && !url.startsWith('/auth') && !url.startsWith('/uploads')) {

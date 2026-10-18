@@ -11,8 +11,10 @@ import {
   AlertCircle,
   Calendar as CalendarIcon,
   Flag,
-  Palette
+  Palette,
+  GitCommit
 } from 'lucide-react';
+import VersionBadge from '../components/VersionBadge';
 import { useTheme } from '../context/ThemeContext';
 
 interface TrainingPoster {
@@ -50,7 +52,7 @@ function getLuminance(hex: string): number {
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'shift' | 'posters' | 'payments' | 'holidays'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'shift' | 'posters' | 'payments' | 'holidays' | 'system'>('profile');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -418,6 +420,24 @@ export default function SettingsPage() {
           }}
         >
           <CalendarIcon className="w-4 h-4" /> Holidays & Days Off ({holidays.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('system')}
+          style={{
+            background: activeTab === 'system' ? 'var(--acc)' : 'var(--card)',
+            color: activeTab === 'system' ? '#fff' : 'var(--ink)',
+            border: '1px solid var(--line)',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            cursor: 'pointer',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <GitCommit className="w-4 h-4" /> System & Git Version
         </button>
       </div>
 
@@ -1079,6 +1099,19 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB 6: SYSTEM & GIT VERSION INFO */}
+      {activeTab === 'system' && (
+        <div>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <h2 style={{ fontSize: '18px', margin: '0 0 4px', color: 'var(--ink)' }}>System Version & Git Information</h2>
+            <p style={{ margin: 0, color: 'var(--mut)', fontSize: '13px' }}>
+              Track the current build release, active Git commit ID, commit log message, branch, and runtime environment.
+            </p>
+          </div>
+          <VersionBadge mode="detailed" />
         </div>
       )}
 

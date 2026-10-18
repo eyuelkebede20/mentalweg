@@ -16,7 +16,19 @@ export default defineConfig({
     })
   ],
   server: {
+    port: 5173,
     proxy: {
+      '/admin': {
+        target: 'http://localhost:5174',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/amdin': {
+        target: 'http://localhost:5174',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/amdin/, '/admin'),
+      },
       '/api': 'http://localhost:3000',
       '/auth': 'http://localhost:3000',
       '/uploads': 'http://localhost:3000'

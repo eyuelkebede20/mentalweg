@@ -7,6 +7,7 @@ import MoneyPage from './pages/MoneyPage';
 import SettingsPage from './pages/SettingsPage';
 import ProfileSwitcher from './components/ProfileSwitcher';
 import ThemeToggle from './components/ThemeToggle';
+import VersionBadge from './components/VersionBadge';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Calendar, Clock, Users, UserPlus, DollarSign, Settings as SettingsIcon } from 'lucide-react';
 
@@ -62,6 +63,7 @@ function Navigation() {
             <ThemeToggle />
           </div>
           <ProfileSwitcher />
+          <VersionBadge mode="compact" />
         </div>
       </nav>
 

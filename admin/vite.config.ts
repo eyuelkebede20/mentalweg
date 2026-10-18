@@ -6,6 +6,21 @@ export default defineConfig({
   base: '/admin/',
   plugins: [
     react(),
+    {
+      name: 'admin-redirect-middleware',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const url = req.url || '';
+          if (url === '/' || url === '' || url.startsWith('/amdin')) {
+            const target = url.replace(/^\/amdin/, '/admin') || '/admin/';
+            res.writeHead(302, { Location: target.startsWith('/admin') ? target : '/admin/' });
+            res.end();
+            return;
+          }
+          next();
+        });
+      }
+    },
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
@@ -17,6 +32,7 @@ export default defineConfig({
     })
   ],
   server: {
+    port: 5174,
     proxy: {
       '/api': 'http://localhost:3000',
       '/auth': 'http://localhost:3000',

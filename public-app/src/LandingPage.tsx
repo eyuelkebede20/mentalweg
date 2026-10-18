@@ -17,6 +17,7 @@ import {
   Sun
 } from 'lucide-react';
 import './LandingPage.css';
+import { useAppVersion } from './utils/useAppVersion';
 
 interface Poster {
   id: string;
@@ -70,6 +71,7 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
   const [scrollDirection, setScrollDirection] = useState<'down' | 'up'>('down');
   const [activePosterTab, setActivePosterTab] = useState<'latest' | 'previous'>('latest');
   const [selectedPoster, setSelectedPoster] = useState<Poster | null>(null);
+  const appVersion = useAppVersion();
 
   const activeStepRef = useRef<number>(0);
   const selectedPosterRef = useRef<Poster | null>(null);
@@ -611,6 +613,14 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
             <footer className="stage-footer-compact">
               <p>
                 &copy; {CURRENT_YEAR} {config.practiceName || 'Mentalweg'}. Licensed Clinical Psychologist · Addis Ababa, Ethiopia.
+              </p>
+              <div className="footer-practitioner-row">
+                <a href="/admin/" className="footer-practitioner-link">
+                  Practitioner Portal
+                </a>
+              </div>
+              <p style={{ marginTop: '4px', fontSize: '11px', opacity: 0.65, fontFamily: 'monospace' }}>
+                v{appVersion.version} · Git #{appVersion.gitCommit}
               </p>
             </footer>
           </div>

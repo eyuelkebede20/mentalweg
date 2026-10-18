@@ -25,6 +25,16 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // Client-side guard for /admin and common typo /amdin
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.startsWith('/amdin')) {
+      window.location.replace(path.replace(/^\/amdin/, '/admin'));
+    } else if (path === '/admin') {
+      window.location.replace('/admin/');
+    }
+  }, []);
+
   const toggleTheme = () => {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };

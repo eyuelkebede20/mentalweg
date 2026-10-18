@@ -989,6 +989,44 @@ html:has(.landing-viewport-wrap) {
   color: var(--subtle-text);
 }
 
+.footer-practitioner-row {
+  margin-top: 0.45rem;
+}
+
+.footer-practitioner-link {
+  font-size: 0.78rem;
+  color: var(--muted-text);
+  text-decoration: none;
+  font-weight: 500;
+  padding: 0.2rem 0.65rem;
+  border-radius: 9999px;
+  background: var(--sand-100);
+  border: 1px solid var(--border-subtle);
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.footer-practitioner-link:hover {
+  color: var(--emerald-600);
+  border-color: var(--emerald-500);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .footer-practitioner-link {
+  background: var(--card-bg-elevated);
+  color: var(--muted-text);
+  border-color: var(--border-subtle);
+}
+
+[data-theme="dark"] .footer-practitioner-link:hover {
+  color: var(--emerald-400);
+  border-color: var(--emerald-400);
+  background: var(--card-bg);
+}
+
+
 /* ======================================================== */
 /* 5. FLOATING STAGE NAVIGATION RAIL (RIGHT SIDE)           */
 /* ======================================================== */
