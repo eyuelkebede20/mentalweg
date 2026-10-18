@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calendar prototype</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f5f7f6;--card:#fff;--ink:#1f2a28;--mut:#6f7c78;--line:#e2e8e5;--acc:#2f6b5c;--accbg:#d6ebe4;--acct:#16382f;--off:#eceeed;--bf:#c9d4d0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121715;--card:#1a211f;--ink:#e6ece9;--mut:#8b9a95;--line:#2a3330;--acc:#6fc2ab;--accbg:#24433a;--acct:#d6f0e8;--off:#1f2624;--bf:#3a4743}}
+:root[data-theme="dark"]{--bg:#121715;--card:#1a211f;--ink:#e6ece9;--mut:#8b9a95;--line:#2a3330;--acc:#6fc2ab;--accbg:#24433a;--acct:#d6f0e8;--off:#1f2624;--bf:#3a4743}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 -apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:14px 14px 8px}
+h1{font-size:19px;margin:0}
+.sub{color:var(--mut);font-size:13px;margin-top:2px}
+.bar{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button.on{background:var(--acc);color:var(--card);border-color:var(--acc)}
+.sp{flex:1}
+.wrap{margin:0 8px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.head,.body{display:grid;grid-template-columns:38px repeat(7,1fr)}
+.head{border-bottom:1px solid var(--line)}
+.hd{padding:6px 2px;text-align:center;font-size:12px;cursor:pointer;border-left:1px solid var(--line)}
+.hd b{display:block;font-size:16px}
+.hd i{font-style:normal;color:var(--mut);font-size:10px}
+.hd.today b{color:var(--acc)}
+.hd.off{background:var(--off)}
+.scroll{max-height:62vh;overflow-y:auto}
+.gut{position:relative}
+.gut span{position:absolute;right:4px;font-size:10px;color:var(--mut);transform:translateY(-6px)}
+.col{position:relative;border-left:1px solid var(--line);background-image:linear-gradient(var(--line) 1px,transparent 1px);background-size:100% 54px}
+.col.off{background-color:var(--off)}
+.ss{position:absolute;left:2px;right:2px;background:var(--accbg);color:var(--acct);border-left:3px solid var(--acc);border-radius:6px;padding:3px 5px;font-size:11px;overflow:hidden;touch-action:none;cursor:grab;user-select:none;z-index:2}
+.ss.g{background:var(--bf);color:var(--ink);border-color:var(--mut)}
+.ss small{display:block;opacity:.75}
+.h{position:absolute;left:0;right:0;bottom:0;height:12px;cursor:ns-resize}
+.h::after{content:"";position:absolute;left:35%;right:35%;bottom:3px;height:3px;border-radius:2px;background:var(--acc);opacity:.6}
+.bf{position:absolute;left:2px;right:2px;background:repeating-linear-gradient(135deg,var(--bf) 0 3px,transparent 3px 6px);border-radius:3px;opacity:.7}
+.msg{margin:10px 14px;font-size:13px;color:var(--mut);min-height:18px}
+.msg.err{color:#b3402e}
+</style></head><body>
+<header>
+<h1>Schedule</h1>
+<div class="sub" id="rng"></div>
+<div class="bar">
+<button id="pv" aria-label="Previous week">&lsaquo;</button><button id="td">Today</button><button id="nx" aria-label="Next week">&rsaquo;</button>
+<span class="sp"></span><button id="gv">Guest view</button>
+</div></header>
+<div class="wrap"><div class="head" id="hd"></div><div class="scroll"><div class="body" id="bd"></div></div></div>
+<div class="msg" id="ms">Drag a session to move it. Pull its bottom edge to extend. Tap an empty slot to add one. Tap a day heading to mark it off.</div>
+<script>
+const PX=.9,H0=8,H1=19,BUF=10,SN=15,$=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,"0"),K=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const mon=d=>{const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x};
+const add=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const et=d=>new Intl.DateTimeFormat("en-u-ca-ethiopic",{day:"numeric",month:"short"}).format(d);
+const gr=d=>d.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+const tm=m=>{const h=m/60|0,x=m%60,p=h>=12?"PM":"AM";return (h%12||12)+":"+pad(x)+" "+p};
+let wk=mon(new Date()),guest=false,uid=9;
+const off=new Set(["2027-01-07","2027-01-19","2027-03-02"]);
+const w0=K(wk);
+let S=[{id:1,n:"Hana",day:K(add(wk,0)),s:600,d:60},{id:2,n:"Dawit",day:K(add(wk,1)),s:840,d:90},{id:3,n:"Selam",day:K(add(wk,2)),s:660,d:60},{id:4,n:"Abel",day:K(add(wk,4)),s:900,d:60}];
+function ok(c,ig){if(off.has(c.day)||c.s<H0*60||c.s+c.d>H1*60)return"Outside working hours or on a day off.";
+ for(const o of S){if(o.id===ig||o.day!==c.day)continue;if(c.s<o.s+o.d+BUF&&o.s<c.s+c.d+BUF)return"Needs "+BUF+" minutes between sessions.";}return""}
+function say(t,e){const m=$("ms");m.textContent=t;m.className="msg"+(e?" err":"")}
+function render(){
+ const days=[...Array(7)].map((_,i)=>add(wk,i)),tk=K(new Date());
+ $("rng").textContent=gr(days[0])+" – "+gr(days[6])+" · Ethiopian: "+et(days[0])+" – "+et(days[6]);
+ $("hd").innerHTML='<div></div>'+days.map(d=>`<div class="hd ${K(d)===tk?"today":""} ${off.has(K(d))?"off":""}" data-k="${K(d)}">${d.toLocaleDateString("en-GB",{weekday:"short"})}<b>${d.getDate()}</b><i>${off.has(K(d))?"Off":et(d)}</i></div>`).join("");
+ let g='<div class="gut" style="height:'+(H1-H0)*54+'px">';
+ for(let h=H0;h<H1;h++)g+=`<span style="top:${(h-H0)*54}px">${tm(h*60).replace(":00","")}</span>`;g+="</div>";
+ days.forEach(d=>{const k=K(d);g+=`<div class="col ${off.has(k)?"off":""}" data-k="${k}" style="height:${(H1-H0)*54}px">`;
+  S.filter(o=>o.day===k).forEach(o=>{const t=(o.s-H0*60)*PX;
+   g+=`<div class="bf" style="top:${(o.s+o.d-H0*60)*PX}px;height:${BUF*PX}px"></div><div class="ss ${guest?"g":""}" data-id="${o.id}" style="top:${t}px;height:${o.d*PX-1}px">${guest?"Taken":o.n}<small>${tm(o.s)}–${tm(o.s+o.d)}</small>${guest?"":'<div class="h"></div>'}</div>`});
+  g+="</div>"});
+ $("bd").innerHTML=g}
+$("hd").onclick=e=>{const h=e.target.closest(".hd");if(!h||guest)return;const k=h.dataset.k;off.has(k)?off.delete(k):off.add(k);render()};
+$("bd").onclick=e=>{const c=e.target.closest(".col");if(guest||!c||e.target!==c)return;
+ const r=c.getBoundingClientRect(),s=Math.round(((e.clientY-r.top)/PX/30))*30+H0*60,n={id:++uid,n:"New client",day:c.dataset.k,s:s,d:60},m=ok(n);
+ if(m)return say(m,1);S.push(n);say("Added. Rename and payment details come with the real app.");render()};
+$("bd").onpointerdown=e=>{if(guest)return;const el=e.target.closest(".ss");if(!el)return;
+ const o=S.find(x=>x.id==el.dataset.id),rs=!!e.target.closest(".h"),x0=e.clientX,y0=e.clientY,cw=el.parentNode.offsetWidth;
+ el.setPointerCapture(e.pointerId);let cand={...o};
+ el.onpointermove=ev=>{const dy=ev.clientY-y0,dx=ev.clientX-x0;
+  if(rs){const d=Math.min(180,Math.max(60,Math.round((o.d+dy/PX)/30)*30));cand={...o,d};el.style.height=d*PX-1+"px"}
+  else{const s=Math.round((o.s+dy/PX)/SN)*SN,dd=Math.round(dx/cw);cand={...o,s,day:K(add(new Date(o.day+"T00:00"),dd))};el.style.transform=`translate(${dd*cw}px,${(s-o.s)*PX}px)`}};
+ el.onpointerup=()=>{el.onpointermove=el.onpointerup=null;const m=ok(cand,o.id);
+  if(m)say(m,1);else{Object.assign(o,cand);say(rs?"Session now "+o.d+" minutes.":"Moved to "+tm(o.s)+".")}render()}};
+$("pv").onclick=()=>{wk=add(wk,-7);render()};$("nx").onclick=()=>{wk=add(wk,7);render()};$("td").onclick=()=>{wk=mon(new Date());render()};
+$("gv").onclick=()=>{guest=!guest;$("gv").classList.toggle("on",guest);say(guest?"Guest view: clients only see taken or free.":"Admin view.");render()};
+render();
+</script></body></html>

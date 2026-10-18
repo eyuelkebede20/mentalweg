@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+admin/node_modules/
+public-app/node_modules/
+verifier-api/node_modules/
+
+# Production builds
+dist/
+admin/dist/
+public-app/dist/
+verifier-api/dist/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Agent / Tooling / IDE metadata
+.gemini/
+.cursor/
+.claude/
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+
+# OS metadata
+Thumbs.db
+.DS_Store
