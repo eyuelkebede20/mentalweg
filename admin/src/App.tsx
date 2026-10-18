@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import CalendarPage from './pages/CalendarPage';
 import TodayPage from './pages/TodayPage';
@@ -10,11 +11,14 @@ import ProfileSwitcher from './components/ProfileSwitcher';
 import ThemeToggle from './components/ThemeToggle';
 import VersionBadge from './components/VersionBadge';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { Calendar, Clock, Users, UserPlus, DollarSign, Settings as SettingsIcon, BookOpen } from 'lucide-react';
+import { usePwaInstall } from './utils/usePwaInstall';
+import { Calendar, Clock, Users, UserPlus, DollarSign, Settings as SettingsIcon, BookOpen, Download, X } from 'lucide-react';
 
 function Navigation() {
   const location = useLocation();
   const { accentColor } = useTheme();
+  const { canInstall, promptInstall } = usePwaInstall();
+  const [showIosTip, setShowIosTip] = useState(false);
 
   const navItems = [
     { path: '/', label: 'Today', icon: Clock },
@@ -60,6 +64,33 @@ function Navigation() {
         </div>
 
         <div className="sidebar-footer">
+          {canInstall && (
+            <button
+              type="button"
+              className="pwa-install-btn"
+              onClick={async () => {
+                const res = await promptInstall();
+                if (res === 'ios') {
+                  setShowIosTip(true);
+                  setTimeout(() => setShowIosTip(false), 8000);
+                }
+              }}
+              title="Install Mentalweg Clinical CMS app to your home screen or desktop"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" />
+              <span>Install Clinical App</span>
+            </button>
+          )}
+
+          {showIosTip && (
+            <div className="pwa-toast-ios" role="alert" style={{ fontSize: '11px', padding: '6px 10px', marginTop: 4 }}>
+              <span>To install on iOS: tap Safari Share (⎋), then "Add to Home Screen" (⊞).</span>
+              <button type="button" onClick={() => setShowIosTip(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
             <span style={{ fontSize: '11px', color: 'var(--mut)', fontWeight: 600 }}>THEME</span>
             <ThemeToggle />

@@ -242,6 +242,66 @@
   transform: rotate(15deg);
 }
 
+.nav-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid var(--border-medium);
+  background: var(--sand-100);
+  color: var(--forest-900);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.nav-install-btn:hover {
+  background: var(--card-bg-elevated);
+  border-color: var(--emerald-600);
+  color: var(--emerald-600);
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .nav-install-btn {
+  background: rgba(43, 92, 75, 0.2);
+  border-color: rgba(110, 231, 183, 0.25);
+  color: #a7f3d0;
+}
+
+[data-theme="dark"] .nav-install-btn:hover {
+  background: rgba(43, 92, 75, 0.4);
+  border-color: #34d399;
+  color: #ecfdf5;
+}
+
+.pwa-toast-ios {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #142820;
+  color: #fcfaf7;
+  padding: 0.85rem 1.25rem;
+  border-radius: 12px;
+  border: 1px solid #34d399;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  max-width: 90vw;
+  animation: pwaToastIn 0.3s ease-out;
+}
+
+@keyframes pwaToastIn {
+  from { opacity: 0; transform: translate(-50%, 15px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
 .nav-cta-btn {
   background: var(--forest-800);
   color: #fff;

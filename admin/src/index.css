@@ -509,6 +509,28 @@ html[data-theme="dark"] .admin-select {
   gap: 10px;
 }
 
+.pwa-install-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--accbg);
+  border: 1px solid var(--acc);
+  color: var(--acct);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pwa-install-btn:hover {
+  background: var(--acc);
+  color: #101513;
+}
+
 .mobile-bottom-nav {
   display: none;
 }

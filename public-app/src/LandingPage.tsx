@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import './LandingPage.css';
 import { useAppVersion } from './utils/useAppVersion';
+import { usePwaInstall } from './utils/usePwaInstall';
 
 export interface BlogPost {
   id: string;
@@ -119,6 +120,8 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const appVersion = useAppVersion();
+  const { canInstall, promptInstall } = usePwaInstall();
+  const [showIosTip, setShowIosTip] = useState<boolean>(false);
 
   const activeStepRef = useRef<number>(0);
   const selectedPosterRef = useRef<Poster | null>(null);
@@ -461,6 +464,25 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
               <strong className="crisis-pill-number">907</strong>
             </span>
           </a>
+
+          {canInstall && (
+            <button
+              type="button"
+              className="nav-install-btn"
+              onClick={async () => {
+                const res = await promptInstall();
+                if (res === 'ios') {
+                  setShowIosTip(true);
+                  setTimeout(() => setShowIosTip(false), 8000);
+                }
+              }}
+              title="Install Mentalweg to your home screen or desktop"
+              aria-label="Install App"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Install App</span>
+            </button>
+          )}
 
           {onToggleTheme && (
             <button
@@ -1227,6 +1249,22 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
               </div>
             </footer>
           </div>
+        </div>
+      )}
+
+      {showIosTip && (
+        <div className="pwa-toast-ios" role="alert">
+          <span>
+            To install on iPhone or iPad: tap the Safari <strong>Share</strong> icon (⎋), then choose <strong>Add to Home Screen</strong> (⊞).
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowIosTip(false)}
+            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>
