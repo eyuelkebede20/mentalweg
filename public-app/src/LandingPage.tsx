@@ -14,10 +14,39 @@ import {
   PhoneCall,
   CheckCircle2,
   Moon,
-  Sun
+  Sun,
+  FileText,
+  Download,
+  FileDown
 } from 'lucide-react';
 import './LandingPage.css';
 import { useAppVersion } from './utils/useAppVersion';
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  category: string;
+  authorName: string;
+  coverImageUrl?: string;
+  readTimeMin: number;
+  publishedAt: string;
+  tags?: string;
+}
+
+export interface MaterialItem {
+  id: string;
+  title: string;
+  description: string;
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  category: string;
+  downloadCount: number;
+}
 
 interface Poster {
   id: string;
@@ -59,9 +88,18 @@ const STAGES: StageInfo[] = [
   { id: 'sanctuary', label: 'Sanctuary', short: '01', eyebrow: 'In-Person Therapy & Counseling' },
   { id: 'ethos', label: 'Clinical Ethos', short: '02', eyebrow: 'Practitioner Voice & Philosophy' },
   { id: 'workshops', label: 'Workshops', short: '03', eyebrow: 'Psychoeducation & Masterclasses' },
-  { id: 'care', label: 'In-Person Care', short: '04', eyebrow: 'Sanctuary & Practice Standards' },
-  { id: 'support', label: 'Care & Support', short: '05', eyebrow: 'Appointments & Emergency Support' },
+  { id: 'insights', label: 'Articles & Blog', short: '04', eyebrow: 'Reflections & Clinical Guidance' },
+  { id: 'materials', label: 'Clinical Tools', short: '05', eyebrow: 'Worksheets, Guides & Protocols' },
+  { id: 'care', label: 'In-Person Care', short: '06', eyebrow: 'Sanctuary & Practice Standards' },
+  { id: 'support', label: 'Care & Support', short: '07', eyebrow: 'Appointments & Emergency Support' },
 ];
+
+function formatFileSize(bytes: number): string {
+  if (!bytes || bytes === 0) return 'PDF Document';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -71,23 +109,41 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
   const [scrollDirection, setScrollDirection] = useState<'down' | 'up'>('down');
   const [activePosterTab, setActivePosterTab] = useState<'latest' | 'previous'>('latest');
   const [selectedPoster, setSelectedPoster] = useState<Poster | null>(null);
+
+  // Blog and clinical materials states
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
+  const [activePostCategory, setActivePostCategory] = useState<string>('All');
+  const [activeMaterialCategory, setActiveMaterialCategory] = useState<string>('All');
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
   const appVersion = useAppVersion();
 
   const activeStepRef = useRef<number>(0);
   const selectedPosterRef = useRef<Poster | null>(null);
+  const selectedPostRef = useRef<BlogPost | null>(null);
+  const isTransitioningRef = useRef<boolean>(false);
+  const touchStartY = useRef<number>(0);
 
   // Keep refs in sync for event listeners
   useEffect(() => {
     activeStepRef.current = activeStep;
     selectedPosterRef.current = selectedPoster;
-  }, [activeStep, selectedPoster]);
+    selectedPostRef.current = selectedPost;
+  }, [activeStep, selectedPoster, selectedPost]);
 
-  // Enable CSS scroll snapping on HTML when landing page is active
+  // Fetch published blog posts and patient materials
   useEffect(() => {
-    document.documentElement.classList.add('landing-snap-active');
-    return () => {
-      document.documentElement.classList.remove('landing-snap-active');
-    };
+    fetch('/api/public/posts')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setPosts(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Error fetching public posts:', err));
+
+    fetch('/api/public/materials')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setMaterials(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Error fetching public materials:', err));
   }, []);
 
   // Helper to determine spatial status: 'is-active' | 'is-prev' (above) | 'is-next' (below)
@@ -102,69 +158,142 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
     p => p.category === activePosterTab
   );
 
-  // Smooth jump to specific stage using native smooth scroll
+  // Filter posts
+  const postCategories = ['All', ...Array.from(new Set(posts.map(p => p.category).filter(Boolean)))];
+  const filteredPosts = activePostCategory === 'All'
+    ? posts
+    : posts.filter(p => p.category === activePostCategory);
+
+  // Filter materials
+  const materialCategories = ['All', ...Array.from(new Set(materials.map(m => m.category).filter(Boolean)))];
+  const filteredMaterials = activeMaterialCategory === 'All'
+    ? materials
+    : materials.filter(m => m.category === activeMaterialCategory);
+
+  const handleDownloadMaterial = async (mat: MaterialItem) => {
+    setDownloadingId(mat.id);
+    try {
+      const res = await fetch(`/api/public/materials/${mat.id}/download`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, downloadCount: data.downloadCount } : m));
+      }
+    } catch (err) {
+      console.error('Download tracking failed:', err);
+    } finally {
+      setDownloadingId(null);
+      const link = document.createElement('a');
+      link.href = mat.fileUrl;
+      link.download = mat.fileName || `${mat.title.replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const renderArticleContent = (text: string) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+    const elements: React.ReactNode[] = [];
+    let listItems: string[] = [];
+
+    const flushList = () => {
+      if (listItems.length > 0) {
+        elements.push(
+          <ul key={`ul-${elements.length}`} className="article-reader-list">
+            {listItems.map((item, idx) => (
+              <li key={idx}>{item}</li>
+            ))}
+          </ul>
+        );
+        listItems = [];
+      }
+    };
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        flushList();
+        return;
+      }
+      if (trimmed.startsWith('## ')) {
+        flushList();
+        elements.push(<h3 key={`h3-${idx}`} className="article-reader-subheading">{trimmed.replace(/^##\s+/, '')}</h3>);
+      } else if (trimmed.startsWith('### ')) {
+        flushList();
+        elements.push(<h4 key={`h4-${idx}`} className="article-reader-subheading-sm">{trimmed.replace(/^###\s+/, '')}</h4>);
+      } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        listItems.push(trimmed.replace(/^[-*]\s+/, ''));
+      } else if (trimmed.startsWith('> ')) {
+        flushList();
+        elements.push(
+          <blockquote key={`bq-${idx}`} className="article-reader-quote">
+            {trimmed.replace(/^>\s+/, '')}
+          </blockquote>
+        );
+      } else {
+        flushList();
+        elements.push(<p key={`p-${idx}`} className="article-reader-para">{trimmed}</p>);
+      }
+    });
+    flushList();
+    return elements;
+  };
+
+  // Smooth jump to specific stage
   const goToStep = useCallback((stepIndex: number) => {
     const targetStep = Math.max(0, Math.min(STAGES.length - 1, stepIndex));
     if (targetStep !== activeStepRef.current) {
       setScrollDirection(targetStep > activeStepRef.current ? 'down' : 'up');
     }
     setActiveStep(targetStep);
+    isTransitioningRef.current = true;
 
-    const stageEl = document.getElementById(`stage-pane-${targetStep}`);
-    if (stageEl) {
-      stageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      const viewportHeight = window.innerHeight || 800;
-      window.scrollTo({
-        top: targetStep * viewportHeight,
-        behavior: 'smooth'
-      });
-    }
+    const viewportHeight = window.innerHeight || 800;
+    const maxScroll = (STAGES.length - 1) * viewportHeight;
+    const targetY = targetStep * viewportHeight;
+
+    window.scrollTo({
+      top: targetY,
+      behavior: 'smooth'
+    });
+
+    const progress = maxScroll > 0 ? targetY / maxScroll : 0;
+    setScrollProgress(progress);
+
+    setTimeout(() => {
+      isTransitioningRef.current = false;
+    }, 650);
   }, []);
 
-  // IntersectionObserver: tracks active stage with 100% native physics
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const idxStr = entry.target.getAttribute('data-stage-index');
-            if (idxStr !== null) {
-              const idx = parseInt(idxStr, 10);
-              if (!isNaN(idx) && idx !== activeStepRef.current) {
-                setScrollDirection(idx > activeStepRef.current ? 'down' : 'up');
-                setActiveStep(idx);
-              }
-            }
-          }
-        }
-      },
-      {
-        threshold: 0.5,
-        rootMargin: '-10% 0px -10% 0px'
-      }
-    );
-
-    const stages = document.querySelectorAll('.stage-pane');
-    stages.forEach(stage => observer.observe(stage));
-
-    return () => observer.disconnect();
-  }, []);
-
-  // Passive scroll progress listener (updates top progress bar & direction)
+  // Window scroll listener: calculates active step when user scrolls or drags scrollbar
   useEffect(() => {
     let lastScrollY = window.scrollY;
 
     const handleScroll = () => {
+      if (isTransitioningRef.current) return;
+
       const scrollY = window.scrollY;
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      if (maxScroll > 0) {
-        setScrollProgress(Math.min(1, Math.max(0, scrollY / maxScroll)));
-      }
+      const viewportHeight = window.innerHeight || 800;
+      const maxScroll = (STAGES.length - 1) * viewportHeight;
+
+      if (maxScroll <= 0) return;
+
+      const progress = Math.min(1, Math.max(0, scrollY / maxScroll));
+      setScrollProgress(progress);
 
       if (Math.abs(scrollY - lastScrollY) > 8) {
         setScrollDirection(scrollY > lastScrollY ? 'down' : 'up');
         lastScrollY = scrollY;
+      }
+
+      const calculatedStep = Math.min(
+        STAGES.length - 1,
+        Math.max(0, Math.round(progress * (STAGES.length - 1)))
+      );
+
+      if (calculatedStep !== activeStepRef.current) {
+        setActiveStep(calculatedStep);
       }
     };
 
@@ -172,12 +301,97 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Keyboard navigation (Arrow keys, PageUp/Down, Home, End)
+  // Wheel listener: intercepts wheel deltas to smoothly transition data cards
+  useEffect(() => {
+    let lastWheelTime = 0;
+
+    const handleWheel = (e: WheelEvent) => {
+      // If modal is active, allow normal scrolling inside modal
+      if (selectedPosterRef.current || selectedPostRef.current) return;
+
+      // Check if user is scrolling inside an internal scrollable element (e.g. posters grid)
+      const target = e.target as HTMLElement | null;
+      const scrollable = target?.closest('.allow-internal-scroll') as HTMLElement | null;
+      if (scrollable && scrollable.scrollHeight > scrollable.clientHeight) {
+        const atTop = scrollable.scrollTop <= 2 && e.deltaY < 0;
+        const atBottom = scrollable.scrollTop + scrollable.clientHeight >= scrollable.scrollHeight - 4 && e.deltaY > 0;
+        if (!atTop && !atBottom) {
+          return; // Let internal element scroll freely
+        }
+      }
+
+      if (Math.abs(e.deltaY) < 18) return;
+
+      const now = Date.now();
+      if (now - lastWheelTime < 650) {
+        e.preventDefault();
+        return;
+      }
+
+      if (e.deltaY > 0) {
+        // Scrolling down
+        if (activeStepRef.current < STAGES.length - 1) {
+          e.preventDefault();
+          lastWheelTime = now;
+          goToStep(activeStepRef.current + 1);
+        }
+      } else if (e.deltaY < 0) {
+        // Scrolling up
+        if (activeStepRef.current > 0) {
+          e.preventDefault();
+          lastWheelTime = now;
+          goToStep(activeStepRef.current - 1);
+        }
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [goToStep]);
+
+  // Touch gesture listener for mobile swipe transitions
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (selectedPosterRef.current || selectedPostRef.current) return;
+      touchStartY.current = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (selectedPosterRef.current || selectedPostRef.current) return;
+      const touchEndY = e.changedTouches[0].clientY;
+      const deltaY = touchStartY.current - touchEndY;
+
+      // Minimum swipe threshold
+      if (Math.abs(deltaY) > 50) {
+        if (deltaY > 0 && activeStepRef.current < STAGES.length - 1) {
+          goToStep(activeStepRef.current + 1);
+        } else if (deltaY < 0 && activeStepRef.current > 0) {
+          goToStep(activeStepRef.current - 1);
+        }
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [goToStep]);
+
+  // Keyboard navigation (Arrow keys, PageUp/Down, Home, End, Space)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedPosterRef.current) {
         if (e.key === 'Escape') {
           setSelectedPoster(null);
+        }
+        return;
+      }
+
+      if (selectedPostRef.current) {
+        if (e.key === 'Escape') {
+          setSelectedPost(null);
         }
         return;
       }
@@ -266,7 +480,14 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
         </div>
       </header>
 
-      {/* 3. PINNED STAGE VIEWPORT: ONLY THE DATA THAT POPULATES CHANGES */}
+      {/* 3. VIRTUAL SCROLL TRACK: ENABLES NATIVE SCROLLBAR & WHEEL DYNAMICS WHILE KEEPING BACKDROP STATIC */}
+      <div className="landing-scroll-track" aria-hidden="true">
+        {STAGES.map((s, idx) => (
+          <div key={s.id} className="scroll-track-step" id={`scroll-anchor-${idx}`} />
+        ))}
+      </div>
+
+      {/* 4. PINNED STAGE VIEWPORT: ONLY THE DATA THAT POPULATES CHANGES */}
       <main className={`landing-stage-viewport scroll-dir-${scrollDirection}`}>
 
         {/* ================= STAGE 0: HERO & SANCTUARY ================= */}
@@ -461,6 +682,183 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
                 className="btn-secondary-action"
                 onClick={() => goToStep(3)}
               >
+                <span>Next: Articles & Insights</span>
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </article>
+
+        {/* ================= STAGE 3: CLINICAL ESSAYS & ARTICLES ================= */}
+        <article
+          id="stage-pane-3"
+          data-stage-index="3"
+          className={`stage-pane stage-articles ${getStageClass(3)}`}
+          aria-hidden={activeStep !== 3}
+        >
+          <div className="stage-content-box allow-internal-scroll articles-content-box">
+            <div className="stage-header-centered">
+              <span className="stage-eyebrow-text">Psychoeducation & Clinical Guidance</span>
+              <h2 className="stage-heading">Articles, Reflections & Mental Health Insights</h2>
+              <p className="stage-subheading">
+                Compassionate, evidence-informed guidance on anxiety, somatic regulation, emotional balance,
+                and personal boundaries authored by Dr. Hana Almaz.
+              </p>
+            </div>
+
+            {/* Category Filter Tabs */}
+            {postCategories.length > 1 && (
+              <div className="category-pills-row">
+                {postCategories.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    className={`cat-pill-btn ${activePostCategory === cat ? 'active' : ''}`}
+                    onClick={() => setActivePostCategory(cat)}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Articles Deck / Cards Grid */}
+            <div className="articles-deck">
+              {filteredPosts.length === 0 ? (
+                <div className="articles-empty-card">
+                  <BookOpen className="w-8 h-8 text-muted mb-2" />
+                  <p>No articles found under "{activePostCategory}".</p>
+                  <span className="empty-subtext">Check back soon as Dr. Hana frequently shares clinical notes and reflections.</span>
+                </div>
+              ) : (
+                filteredPosts.map(post => (
+                  <article
+                    key={post.id}
+                    className="article-card-interactive"
+                    onClick={() => setSelectedPost(post)}
+                  >
+                    <div className="article-card-header">
+                      <span className="article-card-category">{post.category}</span>
+                      <span className="article-card-readtime">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{post.readTimeMin || 5} min read</span>
+                      </span>
+                    </div>
+
+                    <h3 className="article-card-title">{post.title}</h3>
+                    <p className="article-card-excerpt">{post.excerpt}</p>
+
+                    <div className="article-card-footer">
+                      <div className="article-author-info">
+                        <span className="author-avatar-dot" />
+                        <span className="author-name-text">{post.authorName || 'Dr. Hana Almaz'}</span>
+                      </div>
+                      <button type="button" className="article-read-btn">
+                        <span>Read Article</span>
+                        <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <div className="stage-step-actions text-center mt-4">
+              <button
+                type="button"
+                className="btn-secondary-action"
+                onClick={() => goToStep(4)}
+              >
+                <span>Next: Clinical Tools & Downloads</span>
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </article>
+
+        {/* ================= STAGE 4: CLINICAL MATERIALS & DOWNLOADS ================= */}
+        <article
+          id="stage-pane-4"
+          data-stage-index="4"
+          className={`stage-pane stage-materials ${getStageClass(4)}`}
+          aria-hidden={activeStep !== 4}
+        >
+          <div className="stage-content-box allow-internal-scroll materials-content-box">
+            <div className="stage-header-centered">
+              <span className="stage-eyebrow-text">Evidence-Based Self-Reflection</span>
+              <h2 className="stage-heading">Clinical Worksheets, Guides & Protocols</h2>
+              <p className="stage-subheading">
+                Complimentary psychoeducational exercises, somatic grounding protocols, and CBT thought records
+                freely downloadable to reinforce therapeutic progress.
+              </p>
+            </div>
+
+            {/* Category Filter Tabs */}
+            {materialCategories.length > 1 && (
+              <div className="category-pills-row">
+                {materialCategories.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    className={`cat-pill-btn ${activeMaterialCategory === cat ? 'active' : ''}`}
+                    onClick={() => setActiveMaterialCategory(cat)}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Materials Grid */}
+            <div className="materials-deck">
+              {filteredMaterials.length === 0 ? (
+                <div className="materials-empty-card">
+                  <FileText className="w-8 h-8 text-muted mb-2" />
+                  <p>No materials currently available under "{activeMaterialCategory}".</p>
+                  <span className="empty-subtext">Clinical resources are updated alongside workshop modules.</span>
+                </div>
+              ) : (
+                filteredMaterials.map(mat => (
+                  <div key={mat.id} className="material-card-interactive">
+                    <div className="material-card-top">
+                      <div className="material-type-icon">
+                        <FileDown className="w-5 h-5 text-emerald" />
+                      </div>
+                      <div className="material-meta-tag">
+                        <span className="material-category-badge">{mat.category}</span>
+                        <span className="material-size-badge">{formatFileSize(mat.fileSize)}</span>
+                      </div>
+                    </div>
+
+                    <h3 className="material-card-title">{mat.title}</h3>
+                    <p className="material-card-desc">{mat.description}</p>
+
+                    <div className="material-card-actions">
+                      <div className="material-stats">
+                        <Download className="w-3.5 h-3.5 text-muted" />
+                        <span>{mat.downloadCount || 0} downloads</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-material-download"
+                        onClick={() => handleDownloadMaterial(mat)}
+                        disabled={downloadingId === mat.id}
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>{downloadingId === mat.id ? 'Downloading...' : 'Download PDF'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="stage-step-actions text-center mt-4">
+              <button
+                type="button"
+                className="btn-secondary-action"
+                onClick={() => goToStep(5)}
+              >
                 <span>Next: In-Person Sanctuary Details</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
@@ -468,12 +866,12 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
           </div>
         </article>
 
-        {/* ================= STAGE 3: IN-PERSON SANCTUARY & PRACTICE STANDARDS ================= */}
+        {/* ================= STAGE 5: IN-PERSON SANCTUARY & PRACTICE STANDARDS ================= */}
         <article
-          id="stage-pane-3"
-          data-stage-index="3"
-          className={`stage-pane stage-sanctuary ${getStageClass(3)}`}
-          aria-hidden={activeStep !== 3}
+          id="stage-pane-5"
+          data-stage-index="5"
+          className={`stage-pane stage-sanctuary ${getStageClass(5)}`}
+          aria-hidden={activeStep !== 5}
         >
           <div className="stage-content-box allow-internal-scroll">
             <div className="stage-header-centered">
@@ -536,7 +934,7 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
               <button
                 type="button"
                 className="btn-secondary-action"
-                onClick={() => goToStep(4)}
+                onClick={() => goToStep(6)}
               >
                 <span>Next: Care Support & Booking</span>
                 <ChevronDown className="w-4 h-4" />
@@ -545,12 +943,12 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
           </div>
         </article>
 
-        {/* ================= STAGE 4: CARE NETWORK & EMERGENCY SUPPORT ================= */}
+        {/* ================= STAGE 6: CARE NETWORK & EMERGENCY SUPPORT ================= */}
         <article
-          id="stage-pane-4"
-          data-stage-index="4"
-          className={`stage-pane stage-support ${getStageClass(4)}`}
-          aria-hidden={activeStep !== 4}
+          id="stage-pane-6"
+          data-stage-index="6"
+          className={`stage-pane stage-support ${getStageClass(6)}`}
+          aria-hidden={activeStep !== 6}
         >
           <div className="stage-content-box allow-internal-scroll">
             <div className="stage-header-centered">
@@ -743,6 +1141,91 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. ARTICLE READER MODAL OVERLAY */}
+      {selectedPost && (
+        <div
+          className="article-modal-overlay"
+          onClick={() => setSelectedPost(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="article-modal-title"
+        >
+          <div className="article-modal-card allow-internal-scroll" onClick={e => e.stopPropagation()}>
+            <header className="article-modal-header">
+              <div className="article-modal-meta">
+                <span className="modal-category-chip">{selectedPost.category}</span>
+                <span className="modal-readtime-chip">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>{selectedPost.readTimeMin || 5} min read</span>
+                </span>
+                {selectedPost.publishedAt && (
+                  <span className="modal-date-chip">
+                    {new Date(selectedPost.publishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="article-modal-close-btn"
+                onClick={() => setSelectedPost(null)}
+                aria-label="Close article"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </header>
+
+            <h1 id="article-modal-title" className="article-modal-headline">{selectedPost.title}</h1>
+
+            <div className="article-modal-byline">
+              <div className="byline-avatar">HA</div>
+              <div>
+                <strong className="byline-author">{selectedPost.authorName || 'Dr. Hana Almaz'}</strong>
+                <span className="byline-title">Licensed Clinical Psychologist · Addis Ababa</span>
+              </div>
+            </div>
+
+            {selectedPost.excerpt && (
+              <div className="article-modal-lead">
+                <Quote className="w-5 h-5 text-emerald inline-block mr-2" />
+                {selectedPost.excerpt}
+              </div>
+            )}
+
+            <div className="article-modal-body">
+              {renderArticleContent(selectedPost.content)}
+            </div>
+
+            <footer className="article-modal-footer">
+              <div className="modal-footer-callout">
+                <h4>In-Person Guidance in Addis Ababa</h4>
+                <p>If you find resonance in this reflection, Dr. Hana offers dedicated 60-minute therapeutic consultations in Bulgaria Corridor.</p>
+              </div>
+              <div className="modal-footer-btns">
+                <button
+                  type="button"
+                  className="btn-primary-action"
+                  onClick={() => {
+                    setSelectedPost(null);
+                    onBook();
+                  }}
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  <span>Book Consultation with Dr. Hana</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary-action"
+                  onClick={() => setSelectedPost(null)}
+                >
+                  <span>Done Reading</span>
+                </button>
+              </div>
+            </footer>
           </div>
         </div>
       )}

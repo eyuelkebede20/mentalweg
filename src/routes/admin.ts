@@ -10,7 +10,9 @@ import {
   remindersTable,
   sessionChangesTable,
   seriesTable,
-  holidaysTable
+  holidaysTable,
+  postsTable,
+  materialsTable
 } from '../db/schema';
 import { eq, and, gte, lt, lte, desc, isNull, sql } from 'drizzle-orm';
 import { getSettings, updateSettings } from '../services/settings.service';
@@ -28,14 +30,17 @@ export async function adminRoutes(app: FastifyInstance) {
     return await getSettings();
   });
 
-  app.put('/api/admin/settings', async (req, reply) => {
+  const handleUpdateSettings = async (req: any, reply: any) => {
     try {
       const updated = await updateSettings(req.body as any);
       return updated;
     } catch (err: any) {
       return reply.status(400).send({ error: err.message || 'Failed to update settings' });
     }
-  });
+  };
+
+  app.put('/api/admin/settings', handleUpdateSettings);
+  app.patch('/api/admin/settings', handleUpdateSettings);
 
   // 2. Sessions & Calendar
   app.get('/api/admin/sessions', async (req, reply) => {
@@ -957,6 +962,12 @@ export async function adminRoutes(app: FastifyInstance) {
     return db.select().from(holidaysTable).all();
   });
 
+  app.post('/api/admin/holidays/preload', async () => {
+    await seedHolidays();
+    const holis = db.select().from(holidaysTable).all();
+    return { holidays: holis };
+  });
+
   app.post('/api/admin/holidays', async (req, reply) => {
     const schema = z.object({
       date: z.string(),
@@ -978,6 +989,244 @@ export async function adminRoutes(app: FastifyInstance) {
     const params = paramsSchema.safeParse(req.params);
     if (!params.success) return reply.status(400).send({ error: 'Invalid ID' });
     db.delete(holidaysTable).where(eq(holidaysTable.id, params.data.id)).run();
+    return { success: true };
+  });
+
+  // 16. Universal File & Document Upload
+  app.post('/api/admin/upload-file', async (req, reply) => {
+    const schema = z.object({
+      fileBase64: z.string(),
+      fileName: z.string(),
+      fileType: z.string().optional(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'fileBase64 and fileName are required' });
+
+    const { fileBase64, fileName } = parsed.data;
+    try {
+      let ext = 'pdf';
+      let base64Data = fileBase64;
+
+      const dataUriMatch = fileBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (dataUriMatch) {
+        const mime = dataUriMatch[1].toLowerCase();
+        base64Data = dataUriMatch[2];
+        if (mime.includes('pdf')) ext = 'pdf';
+        else if (mime.includes('word') || mime.includes('docx')) ext = 'docx';
+        else if (mime.includes('doc')) ext = 'doc';
+        else if (mime.includes('png')) ext = 'png';
+        else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+        else if (mime.includes('webp')) ext = 'webp';
+        else if (mime.includes('text') || mime.includes('plain')) ext = 'txt';
+      } else {
+        const nameExt = path.extname(fileName).replace('.', '').toLowerCase();
+        if (nameExt) ext = nameExt;
+      }
+
+      const buffer = Buffer.from(base64Data, 'base64');
+      const uploadsDir = path.join(process.cwd(), 'uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const safeBase = path.basename(fileName, path.extname(fileName)).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileTarget = `${safeBase}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}.${ext}`;
+      fs.writeFileSync(path.join(uploadsDir, fileTarget), buffer);
+
+      const sizeKb = buffer.length / 1024;
+      const fileSize = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${Math.round(sizeKb)} KB`;
+
+      return {
+        url: `/uploads/${fileTarget}`,
+        fileName: `${safeBase}.${ext}`,
+        fileSize,
+        fileType: ext,
+      };
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message || 'File upload failed' });
+    }
+  });
+
+  // 17. Blog Posts Management
+  app.get('/api/admin/posts', async () => {
+    return db.select().from(postsTable).orderBy(desc(postsTable.createdAt)).all();
+  });
+
+  app.post('/api/admin/posts', async (req, reply) => {
+    const schema = z.object({
+      title: z.string().min(1),
+      slug: z.string().optional(),
+      excerpt: z.string().optional(),
+      content: z.string().min(1),
+      category: z.string().default('Therapy & Insights'),
+      authorName: z.string().default('Dr. Hana Almaz'),
+      coverImageUrl: z.string().optional(),
+      readTimeMin: z.number().int().default(4),
+      published: z.boolean().default(true),
+      tags: z.string().optional(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Title and content are required' });
+
+    let slug = parsed.data.slug ? parsed.data.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') : '';
+    if (!slug) {
+      slug = parsed.data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `post-${Date.now()}`;
+    }
+
+    // Ensure unique slug
+    const existing = db.select().from(postsTable).where(eq(postsTable.slug, slug)).all();
+    if (existing.length > 0) {
+      slug = `${slug}-${Date.now().toString().slice(-4)}`;
+    }
+
+    const [post] = db.insert(postsTable).values({
+      title: sanitizeText(parsed.data.title),
+      slug,
+      excerpt: parsed.data.excerpt ? sanitizeText(parsed.data.excerpt) : null,
+      content: parsed.data.content,
+      category: sanitizeText(parsed.data.category),
+      authorName: sanitizeText(parsed.data.authorName),
+      coverImageUrl: parsed.data.coverImageUrl || null,
+      readTimeMin: parsed.data.readTimeMin,
+      published: parsed.data.published,
+      tags: parsed.data.tags ? sanitizeText(parsed.data.tags) : null,
+    }).returning().all();
+
+    return post;
+  });
+
+  app.put('/api/admin/posts/:id', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid ID' });
+
+    const schema = z.object({
+      title: z.string().optional(),
+      slug: z.string().optional(),
+      excerpt: z.string().optional(),
+      content: z.string().optional(),
+      category: z.string().optional(),
+      authorName: z.string().optional(),
+      coverImageUrl: z.string().optional(),
+      readTimeMin: z.number().int().optional(),
+      published: z.boolean().optional(),
+      tags: z.string().optional(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid update data' });
+
+    const updates: any = {};
+    if (parsed.data.title !== undefined) updates.title = sanitizeText(parsed.data.title);
+    if (parsed.data.slug !== undefined) updates.slug = parsed.data.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    if (parsed.data.excerpt !== undefined) updates.excerpt = sanitizeText(parsed.data.excerpt);
+    if (parsed.data.content !== undefined) updates.content = parsed.data.content;
+    if (parsed.data.category !== undefined) updates.category = sanitizeText(parsed.data.category);
+    if (parsed.data.authorName !== undefined) updates.authorName = sanitizeText(parsed.data.authorName);
+    if (parsed.data.coverImageUrl !== undefined) updates.coverImageUrl = parsed.data.coverImageUrl;
+    if (parsed.data.readTimeMin !== undefined) updates.readTimeMin = parsed.data.readTimeMin;
+    if (parsed.data.published !== undefined) updates.published = parsed.data.published;
+    if (parsed.data.tags !== undefined) updates.tags = sanitizeText(parsed.data.tags);
+
+    const [updated] = db.update(postsTable)
+      .set(updates)
+      .where(eq(postsTable.id, params.data.id))
+      .returning()
+      .all();
+
+    return updated;
+  });
+
+  app.delete('/api/admin/posts/:id', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid ID' });
+
+    db.delete(postsTable).where(eq(postsTable.id, params.data.id)).run();
+    return { success: true };
+  });
+
+  // 18. Patient Materials & Documents Management
+  app.get('/api/admin/materials', async () => {
+    return db.select().from(materialsTable).orderBy(desc(materialsTable.createdAt)).all();
+  });
+
+  app.post('/api/admin/materials', async (req, reply) => {
+    const schema = z.object({
+      title: z.string().min(1),
+      description: z.string().optional(),
+      fileUrl: z.string().min(1),
+      fileName: z.string().min(1),
+      fileSize: z.string().default('1.0 MB'),
+      fileType: z.string().default('pdf'),
+      category: z.string().default('Clinical Worksheet'),
+      published: z.boolean().default(true),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Title, fileUrl, and fileName are required' });
+
+    const [material] = db.insert(materialsTable).values({
+      title: sanitizeText(parsed.data.title),
+      description: parsed.data.description ? sanitizeText(parsed.data.description) : null,
+      fileUrl: parsed.data.fileUrl,
+      fileName: sanitizeText(parsed.data.fileName),
+      fileSize: parsed.data.fileSize,
+      fileType: parsed.data.fileType.toLowerCase(),
+      category: sanitizeText(parsed.data.category),
+      published: parsed.data.published,
+      downloadCount: 0,
+    }).returning().all();
+
+    return material;
+  });
+
+  app.put('/api/admin/materials/:id', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid ID' });
+
+    const schema = z.object({
+      title: z.string().optional(),
+      description: z.string().optional(),
+      fileUrl: z.string().optional(),
+      fileName: z.string().optional(),
+      fileSize: z.string().optional(),
+      fileType: z.string().optional(),
+      category: z.string().optional(),
+      published: z.boolean().optional(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid update data' });
+
+    const updates: any = {};
+    if (parsed.data.title !== undefined) updates.title = sanitizeText(parsed.data.title);
+    if (parsed.data.description !== undefined) updates.description = sanitizeText(parsed.data.description);
+    if (parsed.data.fileUrl !== undefined) updates.fileUrl = parsed.data.fileUrl;
+    if (parsed.data.fileName !== undefined) updates.fileName = sanitizeText(parsed.data.fileName);
+    if (parsed.data.fileSize !== undefined) updates.fileSize = parsed.data.fileSize;
+    if (parsed.data.fileType !== undefined) updates.fileType = parsed.data.fileType.toLowerCase();
+    if (parsed.data.category !== undefined) updates.category = sanitizeText(parsed.data.category);
+    if (parsed.data.published !== undefined) updates.published = parsed.data.published;
+
+    const [updated] = db.update(materialsTable)
+      .set(updates)
+      .where(eq(materialsTable.id, params.data.id))
+      .returning()
+      .all();
+
+    return updated;
+  });
+
+  app.delete('/api/admin/materials/:id', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid ID' });
+
+    db.delete(materialsTable).where(eq(materialsTable.id, params.data.id)).run();
     return { success: true };
   });
 }

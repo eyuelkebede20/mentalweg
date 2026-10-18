@@ -177,18 +177,26 @@ export default function SettingsPage() {
         paymentAccounts: accounts,
       };
 
-      const res = await fetch('/api/admin/settings', {
-        method: 'PATCH',
+      let res = await fetch('/api/admin/settings', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+
+      if (!res.ok && res.status === 404) {
+        res = await fetch('/api/admin/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (res.ok) {
         setSaveMessage('All practice CMS settings saved and synchronized live.');
         setTimeout(() => setSaveMessage(null), 4000);
       } else {
-        const err = await res.json();
-        setErrorMessage(err.error || 'Failed to save settings.');
+        const err = await res.json().catch(() => ({}));
+        setErrorMessage(err.error || `Failed to save settings (Status ${res.status}).`);
       }
     } catch (e: any) {
       setErrorMessage(e.message || 'Network error while saving settings.');
@@ -927,84 +935,118 @@ export default function SettingsPage() {
       {activeTab === 'payments' && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--line)', padding: '1.75rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
-            <h2 style={{ fontSize: '18px', margin: 0, color: 'var(--ink)' }}>Receiving Payment Accounts</h2>
-            <button
-              onClick={() => {
-                const newAcc: PaymentAccount = {
-                  id: `acc-${Date.now()}`,
-                  provider: 'telebirr',
-                  accountNumber: '',
-                  holderName: 'Dr. Hana Almaz',
-                  active: true,
-                };
-                setAccounts([...accounts, newAcc]);
-              }}
-              style={{ background: 'var(--acc)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-            >
-              + Add Account
-            </button>
+            <div>
+              <h2 style={{ fontSize: '18px', margin: 0, color: 'var(--ink)' }}>Receiving Payment Accounts</h2>
+              <p style={{ color: 'var(--mut)', fontSize: '13px', margin: '4px 0 0' }}>
+                Active accounts are shown to public clients on the payment step for transfer instructions.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                onClick={() => {
+                  const newAcc: PaymentAccount = {
+                    id: `acc-${Date.now()}`,
+                    provider: 'telebirr',
+                    accountNumber: '',
+                    holderName: 'Dr. Hana Almaz',
+                    instructions: '',
+                    active: true,
+                  };
+                  setAccounts([...accounts, newAcc]);
+                }}
+                style={{ background: 'var(--off)', color: 'var(--ink)', border: '1px solid var(--line)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+              >
+                + Add Account
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={{ background: 'var(--acc)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+              >
+                {saving ? 'Saving...' : 'Confirm & Save Accounts'}
+              </button>
+            </div>
           </div>
-          <p style={{ color: 'var(--mut)', fontSize: '13px', margin: '0 0 1.25rem' }}>
-            Active accounts are shown to public clients on the payment step for transfer instructions.
-          </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {accounts.length === 0 && (
+              <p style={{ color: 'var(--mut)', fontSize: '13px', fontStyle: 'italic', margin: '1rem 0' }}>
+                No payment accounts configured yet. Click "+ Add Account" to configure receiving accounts.
+              </p>
+            )}
             {accounts.map((acc, idx) => (
-              <div key={acc.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr auto', gap: '12px', alignItems: 'center', background: 'var(--off)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
-                <input
-                  type="checkbox"
-                  checked={acc.active}
-                  onChange={e => {
-                    const copy = [...accounts];
-                    copy[idx].active = e.target.checked;
-                    setAccounts(copy);
-                  }}
-                  title="Active for public bookings"
-                />
-                <select
-                  value={acc.provider}
-                  onChange={e => {
-                    const copy = [...accounts];
-                    copy[idx].provider = e.target.value;
-                    setAccounts(copy);
-                  }}
-                  className="admin-select"
-                >
-                  <option value="telebirr">Telebirr</option>
-                  <option value="cbe">CBE Mobile</option>
-                  <option value="cbebirr">CBE Birr</option>
-                  <option value="dashen">Dashen Bank</option>
-                  <option value="abyssinia">Bank of Abyssinia</option>
-                </select>
+              <div key={acc.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--off)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr auto', gap: '12px', alignItems: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--mut)', cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={acc.active}
+                      onChange={e => {
+                        const copy = [...accounts];
+                        copy[idx].active = e.target.checked;
+                        setAccounts(copy);
+                      }}
+                      title="Active for public bookings"
+                    />
+                    Active
+                  </label>
+                  <select
+                    value={acc.provider}
+                    onChange={e => {
+                      const copy = [...accounts];
+                      copy[idx].provider = e.target.value;
+                      setAccounts(copy);
+                    }}
+                    className="admin-select"
+                  >
+                    <option value="telebirr">Telebirr</option>
+                    <option value="cbe">CBE Mobile</option>
+                    <option value="cbebirr">CBE Birr</option>
+                    <option value="dashen">Dashen Bank</option>
+                    <option value="abyssinia">Bank of Abyssinia</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Holder Name (e.g. Dr. Hana Almaz)"
+                    value={acc.holderName}
+                    onChange={e => {
+                      const copy = [...accounts];
+                      copy[idx].holderName = e.target.value;
+                      setAccounts(copy);
+                    }}
+                    className="admin-input"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Account / Phone Number"
+                    value={acc.accountNumber}
+                    onChange={e => {
+                      const copy = [...accounts];
+                      copy[idx].accountNumber = e.target.value;
+                      setAccounts(copy);
+                    }}
+                    className="admin-input"
+                  />
+                  <button
+                    onClick={() => setAccounts(accounts.filter(a => a.id !== acc.id))}
+                    style={{ background: 'transparent', border: 'none', color: '#c53030', cursor: 'pointer', padding: '4px' }}
+                    title="Remove account"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
                 <input
                   type="text"
-                  placeholder="Holder Name"
-                  value={acc.holderName}
+                  placeholder="Optional client instructions (e.g. Pay via Telebirr or CBE Birr and upload screenshot)"
+                  value={acc.instructions || ''}
                   onChange={e => {
                     const copy = [...accounts];
-                    copy[idx].holderName = e.target.value;
+                    copy[idx].instructions = e.target.value;
                     setAccounts(copy);
                   }}
                   className="admin-input"
+                  style={{ fontSize: '12px', background: 'var(--card)' }}
                 />
-                <input
-                  type="text"
-                  placeholder="Account Number"
-                  value={acc.accountNumber}
-                  onChange={e => {
-                    const copy = [...accounts];
-                    copy[idx].accountNumber = e.target.value;
-                    setAccounts(copy);
-                  }}
-                  className="admin-input"
-                />
-                <button
-                  onClick={() => setAccounts(accounts.filter(a => a.id !== acc.id))}
-                  style={{ background: 'transparent', border: 'none', color: '#c53030', cursor: 'pointer' }}
-                  title="Remove account"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             ))}
           </div>

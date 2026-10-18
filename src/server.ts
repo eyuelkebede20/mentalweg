@@ -2,11 +2,13 @@ import { buildApp } from './app';
 import { env } from './env';
 
 import { startCronJobs } from './cron';
+import { seedContent } from './db/seedContent';
 
 async function start() {
   const app = await buildApp();
 
   try {
+    await seedContent();
     startCronJobs();
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
     console.log(`Server listening on ${env.BASE_URL}`);

@@ -23,11 +23,50 @@ export default defineConfig({
     },
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Admin PWA',
-        short_name: 'Admin',
-        theme_color: '#2f6b5c',
-        icons: [] // would need real icons
+        name: 'Mentalweg · Clinical CMS',
+        short_name: 'MW Admin',
+        description: 'Clinical management portal: appointments, client records, and telebirr financial tracking.',
+        theme_color: '#121816',
+        background_color: '#121816',
+        display: 'standalone',
+        orientation: 'portrait-primary',
+        start_url: '/admin/',
+        scope: '/admin/',
+        icons: [
+          {
+            src: '/admin/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/admin/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/admin/pwa-maskable-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: '/admin/apple-touch-icon.png',
+            sizes: '180x180',
+            type: 'image/png',
+            purpose: 'any'
+          }
+        ]
+      },
+      workbox: {
+        navigateFallback: '/admin/index.html',
+        navigateFallbackDenylist: [/^\/api/, /^\/auth/, /^\/uploads/]
+      },
+      devOptions: {
+        enabled: true
       }
     })
   ],

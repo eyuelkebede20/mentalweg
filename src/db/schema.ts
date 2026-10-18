@@ -141,3 +141,33 @@ export const auditLogTable = sqliteTable('audit_log', {
   entityId: integer('entity_id'),
   ...timestamps,
 });
+
+export const postsTable = sqliteTable('posts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  slug: text('slug').notNull().unique(),
+  excerpt: text('excerpt'),
+  content: text('content').notNull(),
+  category: text('category').notNull().default('Therapy & Insights'),
+  authorName: text('author_name').notNull().default('Dr. Hana Almaz'),
+  coverImageUrl: text('cover_image_url'),
+  readTimeMin: integer('read_time_min').notNull().default(4),
+  published: integer('published', { mode: 'boolean' }).notNull().default(true),
+  publishedAt: integer('published_at', { mode: 'timestamp' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  tags: text('tags'),
+  ...timestamps,
+});
+
+export const materialsTable = sqliteTable('materials', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  description: text('description'),
+  fileUrl: text('file_url').notNull(),
+  fileName: text('file_name').notNull(),
+  fileSize: text('file_size').notNull().default('1.0 MB'),
+  fileType: text('file_type').notNull().default('pdf'),
+  category: text('category').notNull().default('Clinical Worksheet'),
+  downloadCount: integer('download_count').notNull().default(0),
+  published: integer('published', { mode: 'boolean' }).notNull().default(true),
+  ...timestamps,
+});

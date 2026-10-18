@@ -5,11 +5,12 @@ import ClientsPage from './pages/ClientsPage';
 import IntakePage from './pages/IntakePage';
 import MoneyPage from './pages/MoneyPage';
 import SettingsPage from './pages/SettingsPage';
+import ContentPage from './pages/ContentPage';
 import ProfileSwitcher from './components/ProfileSwitcher';
 import ThemeToggle from './components/ThemeToggle';
 import VersionBadge from './components/VersionBadge';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { Calendar, Clock, Users, UserPlus, DollarSign, Settings as SettingsIcon } from 'lucide-react';
+import { Calendar, Clock, Users, UserPlus, DollarSign, Settings as SettingsIcon, BookOpen } from 'lucide-react';
 
 function Navigation() {
   const location = useLocation();
@@ -20,6 +21,7 @@ function Navigation() {
     { path: '/calendar', label: 'Calendar', icon: Calendar },
     { path: '/intake', label: 'New Patient', icon: UserPlus },
     { path: '/clients', label: 'Clients', icon: Users },
+    { path: '/content', label: 'Resources', icon: BookOpen },
     { path: '/money', label: 'Money', icon: DollarSign },
     { path: '/settings', label: 'Settings', icon: SettingsIcon },
   ];
@@ -100,8 +102,10 @@ export default function App() {
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/intake" element={<IntakePage />} />
               <Route path="/clients" element={<ClientsPage />} />
+              <Route path="/content" element={<ContentPage />} />
               <Route path="/money" element={<MoneyPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<TodayPage />} />
             </Routes>
           </main>
         </div>

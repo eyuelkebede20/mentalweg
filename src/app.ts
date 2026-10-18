@@ -54,16 +54,25 @@ export async function buildApp() {
     decorateReply: false,
   });
 
-  // Serve public app
-  const publicDist = path.join(__dirname, '../public-app/dist');
-  if (fs.existsSync(publicDist)) {
+  // Never cache Service Worker registration scripts
+  app.addHook('onSend', async (request, reply) => {
+    const url = request.raw.url || '';
+    if (url.includes('sw.js') || url.includes('registerSW.js') || url.includes('manifest.webmanifest')) {
+      reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  });
+
+  // 1. Serve admin app (Must register /admin/ before root / to prevent prefix shadowing)
+  const adminDist = path.join(__dirname, '../admin/dist');
+  if (fs.existsSync(adminDist)) {
     app.register(require('@fastify/static'), {
-      root: publicDist,
-      prefix: '/',
+      root: adminDist,
+      prefix: '/admin/',
+      decorateReply: false,
     });
   }
-  
-  // Redirect common typo /amdin -> /admin/
+
+  // 2. Redirects for /admin and common typo /amdin
   app.get('/amdin', async (req, reply) => {
     return reply.redirect('/admin/');
   });
@@ -74,19 +83,16 @@ export async function buildApp() {
     const target = (req.raw.url || '').replace(/^\/amdin/, '/admin');
     return reply.redirect(target.startsWith('/admin') ? target : '/admin/');
   });
-
-  // Redirect /admin -> /admin/
   app.get('/admin', async (req, reply) => {
     return reply.redirect('/admin/');
   });
 
-  // Serve admin app
-  const adminDist = path.join(__dirname, '../admin/dist');
-  if (fs.existsSync(adminDist)) {
+  // 3. Serve public app at root /
+  const publicDist = path.join(__dirname, '../public-app/dist');
+  if (fs.existsSync(publicDist)) {
     app.register(require('@fastify/static'), {
-      root: adminDist,
-      prefix: '/admin/',
-      decorateReply: false,
+      root: publicDist,
+      prefix: '/',
     });
   }
 

@@ -25,15 +25,26 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Client-side guard for /admin and common typo /amdin
+  // Immediate unregister & redirect if public-app bundle loads on /admin or /amdin
+  const isNavigatingToAdmin = typeof window !== 'undefined' && (
+    window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/amdin')
+  );
+
   useEffect(() => {
-    const path = window.location.pathname;
-    if (path.startsWith('/amdin')) {
-      window.location.replace(path.replace(/^\/amdin/, '/admin'));
-    } else if (path === '/admin') {
-      window.location.replace('/admin/');
+    if (isNavigatingToAdmin) {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          for (const reg of regs) {
+            reg.unregister();
+          }
+        });
+      }
+      const raw = window.location.pathname;
+      const target = raw.replace(/^\/amdin/, '/admin');
+      const finalUrl = target === '/admin' ? '/admin/' : target;
+      window.location.replace(finalUrl);
     }
-  }, []);
+  }, [isNavigatingToAdmin]);
 
   const toggleTheme = () => {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
@@ -88,6 +99,14 @@ export default function App() {
     setStep(1); // Step 1: Choose time convention
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  if (isNavigatingToAdmin) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--sand-50, #fbfaf8)', color: 'var(--forest-900, #14241e)', fontFamily: 'sans-serif' }}>
+        <p style={{ fontSize: '1.05rem', fontWeight: 600 }}>Opening Mental Weg Clinical Admin...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell" data-theme={theme}>

@@ -15,11 +15,11 @@ export const TrainingPosterSchema = z.object({
 export type TrainingPoster = z.infer<typeof TrainingPosterSchema>;
 
 export const PaymentAccountConfigSchema = z.object({
-  id: z.string(),
-  provider: z.string(), // 'telebirr', 'cbe', 'cbebirr', 'dashen', 'abyssinia'
-  accountNumber: z.string(),
-  holderName: z.string(),
-  instructions: z.string().optional(),
+  id: z.string().default(() => `acc-${Date.now()}`),
+  provider: z.string().default('telebirr'),
+  accountNumber: z.string().default(''),
+  holderName: z.string().default(''),
+  instructions: z.string().nullable().optional(),
   active: z.boolean().default(true),
 });
 

@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db';
-import { sessionsTable, clientsTable, paymentsTable } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { sessionsTable, clientsTable, paymentsTable, postsTable, materialsTable } from '../db/schema';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { getSettings } from '../services/settings.service';
 import { createHold } from '../services/hold.service';
 import { verifyReceipt } from '../services/verifier.service';
@@ -199,6 +199,56 @@ export async function publicRoutes(app: FastifyInstance) {
         : 'Your booking proof has been submitted and is pending verification.',
       paymentId: payment.id,
       slotStartUtc: session.startUtc,
+    };
+  });
+
+  // Public Blog Articles
+  app.get('/api/public/posts', async () => {
+    return db.select().from(postsTable)
+      .where(eq(postsTable.published, true))
+      .orderBy(desc(postsTable.createdAt))
+      .all();
+  });
+
+  app.get('/api/public/posts/:slug', async (req, reply) => {
+    const paramsSchema = z.object({ slug: z.string() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid slug' });
+
+    const [post] = db.select().from(postsTable)
+      .where(and(eq(postsTable.slug, params.data.slug), eq(postsTable.published, true)))
+      .all();
+
+    if (!post) return reply.status(404).send({ error: 'Article not found' });
+    return post;
+  });
+
+  // Public Clinical Materials & Documents
+  app.get('/api/public/materials', async () => {
+    return db.select().from(materialsTable)
+      .where(eq(materialsTable.published, true))
+      .orderBy(desc(materialsTable.createdAt))
+      .all();
+  });
+
+  app.post('/api/public/materials/:id/download', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid ID' });
+
+    const [material] = db.select().from(materialsTable).where(eq(materialsTable.id, params.data.id)).all();
+    if (!material) return reply.status(404).send({ error: 'Material not found' });
+
+    db.update(materialsTable)
+      .set({ downloadCount: sql`${materialsTable.downloadCount} + 1` })
+      .where(eq(materialsTable.id, params.data.id))
+      .run();
+
+    return {
+      success: true,
+      fileUrl: material.fileUrl,
+      fileName: material.fileName,
+      downloadCount: material.downloadCount + 1,
     };
   });
 }
