@@ -7,7 +7,8 @@
     "verifier": "tsx verifier-api/src/standalone.ts",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "build:vercel": "npm run build --prefix public-app && npm run build --prefix admin && node scripts/build-vercel.mjs",
+    "build": "npm run build --prefix public-app && npm run build --prefix admin && node scripts/build-vercel.mjs",
+    "build:vercel": "npm run build",
     "test": "vitest run"
   },
   "keywords": [],
