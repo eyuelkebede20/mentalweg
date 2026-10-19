@@ -1,39 +1,72 @@
-FROM node:20-alpine
+# syntax=docker/dockerfile:1
 
-# Set working directory
-WORKDIR /app
+# ===================================================================
+# Stage 1: Build Public Landing & Booking App (Vite SPA)
+# ===================================================================
+FROM node:22-bookworm-slim AS build-public
+WORKDIR /app/public-app
 
-# Copy root package files
-COPY package.json package-lock.json ./
-
-# Install backend dependencies
+COPY public-app/package*.json ./
 RUN npm ci
 
-# Copy backend code
-COPY tsconfig.json ./
-COPY src/ ./src/
-
-# Copy and build public-app
-COPY public-app/package.json public-app/package-lock.json ./public-app/
-RUN cd public-app && npm ci
-COPY public-app/ ./public-app/
-RUN cd public-app && npm run build
-
-# Copy and build admin app
-COPY admin/package.json admin/package-lock.json ./admin/
-RUN cd admin && npm ci
-COPY admin/ ./admin/
-RUN cd admin && npm run build
-
-# Build backend
+COPY public-app/ ./
 RUN npm run build
 
-# Setup environment variables
+# ===================================================================
+# Stage 2: Build Admin Clinical CMS (Vite SPA)
+# ===================================================================
+FROM node:22-bookworm-slim AS build-admin
+WORKDIR /app/admin
+
+COPY admin/package*.json ./
+RUN npm ci
+
+COPY admin/ ./
+RUN npm run build
+
+# ===================================================================
+# Stage 3: Build Server Dependencies & Native Addons
+# ===================================================================
+FROM node:22-bookworm-slim AS build-server
+WORKDIR /app
+
+# Install native compilation toolchain for better-sqlite3 and argon2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# ===================================================================
+# Stage 4: Production Runner Image
+# ===================================================================
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV DATA_DIR=/data
 
-# Expose port
+# Create persistent storage mount point for SQLite database and uploads
+RUN mkdir -p /data/uploads
+
+# Copy production node_modules from build-server
+COPY --from=build-server /app/node_modules ./node_modules
+COPY package*.json ./
+COPY src/ ./src/
+COPY drizzle/ ./drizzle/
+COPY scripts/ ./scripts/
+COPY verifier-api/ ./verifier-api/
+
+# Copy compiled frontend distributions
+COPY --from=build-public /app/public-app/dist ./public-app/dist
+COPY --from=build-admin /app/admin/dist ./admin/dist
+
+# Expose default HTTP port
 EXPOSE 3000
 
-# Start server
-CMD ["node", "dist/server.js"]
+# Start server (or embedded services if configured)
+CMD ["npm", "start"]

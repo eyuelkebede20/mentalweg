@@ -11,6 +11,7 @@ import { sanitizeText, sanitizeEmail, normalizeEthiopianPhone } from '../utils/s
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { getUploadsDir } from '../utils/paths';
 
 export async function publicRoutes(app: FastifyInstance) {
   
@@ -105,11 +106,7 @@ export async function publicRoutes(app: FastifyInstance) {
         if (matches) {
           const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
           const buffer = Buffer.from(matches[2], 'base64');
-          if (buffer.length <= 5 * 1024 * 1024) { // max 5MB
-            const uploadsDir = path.join(process.cwd(), 'uploads');
-            if (!fs.existsSync(uploadsDir)) {
-              fs.mkdirSync(uploadsDir, { recursive: true });
-            }
+            const uploadsDir = getUploadsDir();
             const filename = `receipt_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
             fs.writeFileSync(path.join(uploadsDir, filename), buffer);
             screenshotPath = `/uploads/${filename}`;

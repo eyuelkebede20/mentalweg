@@ -7,6 +7,7 @@ import { authRoutes } from './routes/auth';
 import { adminRoutes } from './routes/admin';
 import { publicRoutes } from './routes/public';
 import { getAppVersionInfo } from './utils/version';
+import { getUploadsDir } from './utils/paths';
 
 export async function buildApp() {
   const app = Fastify({
@@ -44,10 +45,7 @@ export async function buildApp() {
   });
 
   // Serve uploads
-  const uploadsDir = path.join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
+  const uploadsDir = getUploadsDir();
   app.register(require('@fastify/static'), {
     root: uploadsDir,
     prefix: '/uploads/',

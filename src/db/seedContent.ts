@@ -2,6 +2,7 @@ import { db } from './index';
 import { postsTable, materialsTable } from './schema';
 import fs from 'fs';
 import path from 'path';
+import { getUploadsDir } from '../utils/paths';
 
 export async function seedContent() {
   const existingPosts = db.select().from(postsTable).all();
@@ -80,10 +81,7 @@ By cultivating emotional granularity, we stop reacting blindly to our emotional 
   }
 
   // Ensure uploads directory exists
-  const uploadsDir = path.join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
+  const uploadsDir = getUploadsDir();
 
   // Create lightweight placeholder PDF documents for downloadable clinical tools
   const createSimplePdf = (filePath: string, title: string, subtitle: string) => {

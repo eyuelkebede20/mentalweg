@@ -22,6 +22,7 @@ import { seedHolidays } from '../db/seedHolidays';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { getUploadsDir } from '../utils/paths';
 
 export async function adminRoutes(app: FastifyInstance) {
   
@@ -457,10 +458,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
       const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
       const buffer = Buffer.from(matches[2], 'base64');
-      const uploadsDir = path.join(process.cwd(), 'uploads');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
+      const uploadsDir = getUploadsDir();
 
       const cleanBase = fileName ? fileName.replace(/[^a-zA-Z0-9_-]/g, '') : 'img';
       const fileTarget = `${cleanBase}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}.${ext}`;
@@ -1025,10 +1023,7 @@ export async function adminRoutes(app: FastifyInstance) {
       }
 
       const buffer = Buffer.from(base64Data, 'base64');
-      const uploadsDir = path.join(process.cwd(), 'uploads');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
+      const uploadsDir = getUploadsDir();
 
       const safeBase = path.basename(fileName, path.extname(fileName)).replace(/[^a-zA-Z0-9_-]/g, '_');
       const fileTarget = `${safeBase}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}.${ext}`;

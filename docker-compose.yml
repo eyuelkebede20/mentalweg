@@ -1,14 +1,25 @@
-version: '3.8'
-
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATA_DIR=/data
+      - BASE_URL=http://localhost:3000
+      - SESSION_SECRET=local-development-session-secret-key-32-chars-min
+      - SMTP_HOST=localhost
+      - SMTP_PORT=587
+      - SMTP_USER=dummy
+      - SMTP_PASS=dummy
+      - VERIFIER_BASE_URL=http://localhost:3001
+      - VERIFIER_API_KEY=dummy-key
     volumes:
-      - mentalweg_data:/app/data
-    env_file:
-      - .env
+      - mentalweg_data:/data
+    restart: unless-stopped
 
 volumes:
   mentalweg_data:
