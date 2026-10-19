@@ -11,6 +11,10 @@
     "build:vercel": "npm run build",
     "test": "vitest run"
   },
+  "workspaces": [
+    "public-app",
+    "admin"
+  ],
   "keywords": [],
   "author": "",
   "license": "ISC",

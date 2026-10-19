@@ -51,7 +51,7 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/admin/, /^\/amdin/, /^\/api/, /^\/auth/, /^\/uploads/],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname === '/api/public/config',
+            urlPattern: ({ url }: { url: URL }) => url.pathname === '/api/public/config',
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'mw-practice-config-cache',
@@ -65,7 +65,7 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/uploads/'),
+            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/uploads/'),
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'mw-posters-cache',
