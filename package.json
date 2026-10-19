@@ -7,6 +7,7 @@
     "verifier": "tsx verifier-api/src/standalone.ts",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
+    "build:vercel": "npm run build --prefix public-app && npm run build --prefix admin && node scripts/build-vercel.mjs",
     "test": "vitest run"
   },
   "keywords": [],
@@ -16,6 +17,7 @@
     "@fastify/cookie": "^11.1.2",
     "@fastify/multipart": "^10.1.2",
     "@fastify/static": "^10.1.5",
+    "@libsql/client": "^0.18.0",
     "argon2": "^0.45.1",
     "better-sqlite3": "^13.0.3",
     "date-fns": "^4.4.0",
@@ -34,6 +36,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^8.0.2",
     "@types/web-push": "^3.6.4",
+    "@vercel/node": "^24.0.3",
     "concurrently": "^10.0.5",
     "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.2",

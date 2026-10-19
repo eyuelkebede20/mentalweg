@@ -106,11 +106,10 @@ export async function publicRoutes(app: FastifyInstance) {
         if (matches) {
           const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
           const buffer = Buffer.from(matches[2], 'base64');
-            const uploadsDir = getUploadsDir();
-            const filename = `receipt_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
-            fs.writeFileSync(path.join(uploadsDir, filename), buffer);
-            screenshotPath = `/uploads/${filename}`;
-          }
+          const uploadsDir = getUploadsDir();
+          const filename = `receipt_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+          fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+          screenshotPath = `/uploads/${filename}`;
         }
       } catch (err) {
         console.error('Failed to save receipt image:', err);

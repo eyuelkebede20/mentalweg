@@ -7,7 +7,7 @@ import fs from 'node:fs';
  * uploads are placed in ${DATA_DIR}/uploads so they persist across redeployments.
  */
 export function getUploadsDir(): string {
-  const baseDir = process.env.DATA_DIR || process.cwd();
+  const baseDir = process.env.DATA_DIR || (process.env.VERCEL ? '/tmp' : process.cwd());
   const dir = path.resolve(baseDir, 'uploads');
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });

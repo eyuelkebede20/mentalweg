@@ -38,7 +38,7 @@ export function startCronJobs() {
       await sendPushNotification({
         title: 'Session Reminder',
         body: `Appointment at ${timeStr} today. Remind client ${client.displayName}?`,
-        data: { sessionId: session.id, phone: client.phone }
+        data: { sessionId: session.id, phone: client.phoneE164 }
       });
     }
 

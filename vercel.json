@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "dist/client",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/auth/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/((?!admin|api|auth|uploads|assets|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
