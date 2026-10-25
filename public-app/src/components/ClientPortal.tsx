@@ -214,18 +214,8 @@ export default function ClientPortal({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '12px' }}>
         <button
           onClick={onBackToHome}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--mut)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '14px',
-            fontWeight: 500,
-            cursor: 'pointer',
-            padding: 0
-          }}
+          className="btn-sanctuary-secondary"
+          style={{ padding: '0.45rem 1rem', fontSize: '13px' }}
         >
           <ArrowLeft className="w-4 h-4" /> Back to Sanctuary
         </button>
@@ -233,19 +223,7 @@ export default function ClientPortal({
         {/* Time convention switch */}
         <button
           onClick={onToggleConvention}
-          style={{
-            background: 'var(--off)',
-            border: '1px solid var(--line)',
-            color: 'var(--ink)',
-            padding: '6px 12px',
-            borderRadius: '20px',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
+          className="btn-sanctuary-pill"
           title="Switch between Ethiopian Local Time and Gregorian (GMT+3)"
         >
           <Globe className="w-3.5 h-3.5 text-acc" />
@@ -390,20 +368,8 @@ export default function ClientPortal({
                       {session.canReschedule ? (
                         <button
                           onClick={() => handleOpenReschedule(session)}
-                          style={{
-                            background: 'var(--acc)',
-                            color: '#fff',
-                            border: 'none',
-                            padding: '8px 16px',
-                            borderRadius: '8px',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                          }}
+                          className="btn-sanctuary-primary"
+                          style={{ padding: '0.55rem 1.15rem', fontSize: '13px' }}
                         >
                           <Calendar className="w-4 h-4" /> Reschedule Session
                         </button>
@@ -411,22 +377,9 @@ export default function ClientPortal({
                         <button
                           disabled
                           title={`Rescheduling locked within ${policy.rescheduleLeadTimeDays} days of appointment`}
-                          style={{
-                            background: 'var(--off)',
-                            color: 'var(--mut)',
-                            border: '1px solid var(--line)',
-                            padding: '8px 16px',
-                            borderRadius: '8px',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            cursor: 'not-allowed',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            opacity: 0.65
-                          }}
+                          className="btn-sanctuary-locked"
                         >
-                          <Lock className="w-4 h-4 text-mut" /> Reschedule Inactive
+                          <Lock className="w-4 h-4" /> Reschedule Inactive
                         </button>
                       )}
                     </div>
@@ -587,14 +540,15 @@ export default function ClientPortal({
                               type="button"
                               onClick={() => setSelectedNewSlot(slot.startUtc)}
                               style={{
-                                background: isSelected ? 'var(--acc)' : 'var(--card)',
+                                background: isSelected ? 'linear-gradient(180deg, var(--btn-forest-top) 0%, var(--btn-forest-bottom) 100%)' : 'var(--card)',
                                 color: isSelected ? '#fff' : 'var(--ink)',
-                                border: isSelected ? '1px solid var(--acc)' : '1px solid var(--line)',
+                                border: isSelected ? '1.5px solid rgba(255, 255, 255, 0.2)' : '1px solid var(--line)',
+                                boxShadow: isSelected ? 'var(--btn-rim-light), 0 4px 12px rgba(20, 36, 30, 0.16)' : '0 1px 2px rgba(0, 0, 0, 0.03)',
                                 padding: '10px 12px',
-                                borderRadius: '8px',
+                                borderRadius: 'var(--btn-tile-radius)',
                                 textAlign: 'left',
                                 cursor: 'pointer',
-                                transition: 'all 0.15s ease'
+                                transition: 'all 0.18s ease'
                               }}
                             >
                               <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '2px' }}>
@@ -623,16 +577,8 @@ export default function ClientPortal({
                   type="button"
                   onClick={() => setReschedulingSession(null)}
                   disabled={submittingReschedule}
-                  style={{
-                    background: 'var(--card)',
-                    border: '1px solid var(--line)',
-                    color: 'var(--ink)',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
+                  className="btn-sanctuary-secondary"
+                  style={{ padding: '0.55rem 1.25rem', fontSize: '13px' }}
                 >
                   Cancel
                 </button>
@@ -640,16 +586,8 @@ export default function ClientPortal({
                   type="button"
                   onClick={handleConfirmReschedule}
                   disabled={!selectedNewSlot || submittingReschedule}
-                  style={{
-                    background: selectedNewSlot ? 'var(--acc)' : 'var(--off)',
-                    color: selectedNewSlot ? '#fff' : 'var(--mut)',
-                    border: 'none',
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: selectedNewSlot ? 'pointer' : 'not-allowed'
-                  }}
+                  className="btn-sanctuary-primary"
+                  style={{ padding: '0.55rem 1.45rem', fontSize: '13px' }}
                 >
                   {submittingReschedule ? 'Rescheduling...' : 'Confirm Move'}
                 </button>

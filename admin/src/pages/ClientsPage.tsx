@@ -444,32 +444,16 @@ export default function ClientsPage() {
                       {c.approvalStatus === 'pending' && (
                         <button
                           onClick={() => approvePatient(c.id)}
-                          style={{
-                            background: '#165b38',
-                            color: '#fff',
-                            border: 'none',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            fontWeight: 700,
-                          }}
+                          className="btn-admin-primary"
+                          style={{ padding: '5px 12px', fontSize: '11.5px' }}
                         >
                           Approve
                         </button>
                       )}
                       <button
                         onClick={() => openClientDetail(c)}
-                        style={{
-                          background: 'var(--off)',
-                          color: 'var(--ink)',
-                          border: '1px solid var(--line)',
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                        }}
+                        className="btn-admin-secondary"
+                        style={{ padding: '5px 10px', fontSize: '11.5px' }}
                       >
                         View Record
                       </button>

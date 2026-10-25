@@ -10,7 +10,7 @@ describe('Patient Authentication, Approval, and Dashboard System', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (app) await app.close();

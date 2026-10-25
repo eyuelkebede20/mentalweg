@@ -248,19 +248,8 @@ export default function PatientAuthPage({
         {/* Back Link */}
         <button
           onClick={onBackToSanctuary}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--mut)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '13px',
-            fontWeight: 500,
-            cursor: 'pointer',
-            padding: 0,
-            marginBottom: '1.5rem',
-          }}
+          className="btn-sanctuary-secondary"
+          style={{ padding: '0.45rem 1rem', fontSize: '13px', marginBottom: '1.5rem' }}
         >
           <ArrowLeft className="w-4 h-4" /> Return to Sanctuary
         </button>
@@ -403,20 +392,11 @@ export default function PatientAuthPage({
             <button
               type="submit"
               disabled={loading}
+              className="btn-sanctuary-primary"
               style={{
                 width: '100%',
-                background: 'var(--acc)',
-                color: '#fff',
-                border: 'none',
-                padding: '11px',
-                borderRadius: '8px',
-                fontWeight: 600,
+                padding: '0.85rem',
                 fontSize: '14px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
                 marginBottom: '1rem'
               }}
             >
@@ -435,22 +415,8 @@ export default function PatientAuthPage({
               type="button"
               onClick={handleGoogleSignInClick}
               disabled={loading}
-              style={{
-                width: '100%',
-                background: 'var(--off)',
-                color: 'var(--ink)',
-                border: '1px solid var(--line)',
-                padding: '10px',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                marginBottom: '1.5rem'
-              }}
+              className="btn-sanctuary-google"
+              style={{ marginBottom: '1.5rem' }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -606,20 +572,11 @@ export default function PatientAuthPage({
             <button
               type="submit"
               disabled={loading}
+              className="btn-sanctuary-primary"
               style={{
                 width: '100%',
-                background: 'var(--acc)',
-                color: '#fff',
-                border: 'none',
-                padding: '11px',
-                borderRadius: '8px',
-                fontWeight: 600,
+                padding: '0.85rem',
                 fontSize: '14px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
                 marginBottom: '1rem'
               }}
             >
@@ -671,20 +628,11 @@ export default function PatientAuthPage({
             <button
               type="submit"
               disabled={loading}
+              className="btn-sanctuary-primary"
               style={{
                 width: '100%',
-                background: 'var(--acc)',
-                color: '#fff',
-                border: 'none',
-                padding: '11px',
-                borderRadius: '8px',
-                fontWeight: 600,
+                padding: '0.85rem',
                 fontSize: '14px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
                 marginBottom: '1rem'
               }}
             >
@@ -778,20 +726,11 @@ export default function PatientAuthPage({
             <button
               type="submit"
               disabled={loading}
+              className="btn-sanctuary-primary"
               style={{
                 width: '100%',
-                background: 'var(--acc)',
-                color: '#fff',
-                border: 'none',
-                padding: '11px',
-                borderRadius: '8px',
-                fontWeight: 600,
+                padding: '0.85rem',
                 fontSize: '14px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
                 marginBottom: '1rem'
               }}
             >
@@ -806,16 +745,8 @@ export default function PatientAuthPage({
             <button
               type="button"
               onClick={() => { setMode('login'); setSuccessNotice(null); }}
-              style={{
-                background: 'var(--acc)',
-                color: '#fff',
-                border: 'none',
-                padding: '8px 18px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
+              className="btn-sanctuary-primary"
+              style={{ padding: '0.65rem 1.6rem', fontSize: '13px' }}
             >
               Return to Login
             </button>

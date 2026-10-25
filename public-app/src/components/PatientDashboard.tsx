@@ -231,19 +231,8 @@ export default function PatientDashboard({
           {/* Clock format switch */}
           <button
             onClick={onToggleConvention}
-            style={{
-              background: 'var(--off)',
-              border: '1px solid var(--line)',
-              color: 'var(--ink)',
-              padding: '6px 12px',
-              borderRadius: '20px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
+            className="btn-sanctuary-pill"
+            title="Switch between Ethiopian Local Time and Gregorian (GMT+3)"
           >
             <Globe className="w-3.5 h-3.5 text-acc" />
             <span>Clock: {timeConvention === 'ethiopian' ? 'Ethiopian' : 'GMT+3'}</span>
@@ -252,19 +241,8 @@ export default function PatientDashboard({
           {/* Logout button */}
           <button
             onClick={handleLogoutClick}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--line)',
-              color: 'var(--mut)',
-              padding: '6px 12px',
-              borderRadius: '20px',
-              fontSize: '12px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
+            className="btn-sanctuary-secondary"
+            style={{ padding: '0.45rem 0.95rem', fontSize: '12px' }}
           >
             <LogOut className="w-3.5 h-3.5" /> Sign Out
           </button>
@@ -300,20 +278,8 @@ export default function PatientDashboard({
         <div>
           <button
             onClick={handleOpenBooking}
-            style={{
-              background: 'var(--acc)',
-              color: '#fff',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '10px',
-              fontWeight: 600,
-              fontSize: '14px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 12px rgba(36, 87, 74, 0.2)'
-            }}
+            className="btn-sanctuary-primary"
+            style={{ padding: '0.65rem 1.45rem', fontSize: '14px' }}
           >
             <Plus className="w-4 h-4" /> Book New Session
           </button>
@@ -428,39 +394,16 @@ export default function PatientDashboard({
                     {session.canReschedule ? (
                       <button
                         onClick={() => handleOpenReschedule(session)}
-                        style={{
-                          background: 'var(--acc)',
-                          color: '#fff',
-                          border: 'none',
-                          padding: '8px 14px',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
+                        className="btn-sanctuary-primary"
+                        style={{ padding: '0.52rem 1.15rem', fontSize: '13px' }}
                       >
                         <Calendar className="w-4 h-4" /> Reschedule
                       </button>
                     ) : (
                       <button
                         disabled
-                        style={{
-                          background: 'var(--off)',
-                          color: 'var(--mut)',
-                          border: '1px solid var(--line)',
-                          padding: '8px 14px',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          cursor: 'not-allowed',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          opacity: 0.6
-                        }}
+                        className="btn-sanctuary-locked"
+                        title={`Rescheduling locked within ${policy.rescheduleLeadTimeDays} days of appointment`}
                       >
                         <Lock className="w-4 h-4" /> Reschedule Locked
                       </button>
@@ -598,13 +541,15 @@ export default function PatientDashboard({
                           type="button"
                           onClick={() => setSelectedBookingSlot(slot.startUtc)}
                           style={{
-                            background: isSelected ? 'var(--acc)' : 'var(--card)',
+                            background: isSelected ? 'linear-gradient(180deg, var(--btn-forest-top) 0%, var(--btn-forest-bottom) 100%)' : 'var(--card)',
                             color: isSelected ? '#fff' : 'var(--ink)',
-                            border: isSelected ? '1px solid var(--acc)' : '1px solid var(--line)',
+                            border: isSelected ? '1.5px solid rgba(255, 255, 255, 0.2)' : '1px solid var(--line)',
+                            boxShadow: isSelected ? 'var(--btn-rim-light), 0 4px 12px rgba(20, 36, 30, 0.16)' : '0 1px 2px rgba(0, 0, 0, 0.03)',
                             padding: '10px 12px',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--btn-tile-radius)',
                             textAlign: 'left',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            transition: 'all 0.18s ease'
                           }}
                         >
                           <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '2px' }}>
@@ -626,7 +571,8 @@ export default function PatientDashboard({
                   type="button"
                   onClick={() => setBookingModalOpen(false)}
                   disabled={bookingSubmitting}
-                  style={{ background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                  className="btn-sanctuary-secondary"
+                  style={{ padding: '0.55rem 1.25rem', fontSize: '13px' }}
                 >
                   Cancel
                 </button>
@@ -634,16 +580,8 @@ export default function PatientDashboard({
                   type="button"
                   onClick={handleConfirmBooking}
                   disabled={!selectedBookingSlot || bookingSubmitting}
-                  style={{
-                    background: selectedBookingSlot ? 'var(--acc)' : 'var(--off)',
-                    color: selectedBookingSlot ? '#fff' : 'var(--mut)',
-                    border: 'none',
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: selectedBookingSlot ? 'pointer' : 'not-allowed'
-                  }}
+                  className="btn-sanctuary-primary"
+                  style={{ padding: '0.55rem 1.45rem', fontSize: '13px' }}
                 >
                   {bookingSubmitting ? 'Confirming...' : 'Confirm Appointment'}
                 </button>
@@ -728,13 +666,15 @@ export default function PatientDashboard({
                           type="button"
                           onClick={() => setSelectedRescheduleSlot(slot.startUtc)}
                           style={{
-                            background: isSelected ? 'var(--acc)' : 'var(--card)',
+                            background: isSelected ? 'linear-gradient(180deg, var(--btn-forest-top) 0%, var(--btn-forest-bottom) 100%)' : 'var(--card)',
                             color: isSelected ? '#fff' : 'var(--ink)',
-                            border: isSelected ? '1px solid var(--acc)' : '1px solid var(--line)',
+                            border: isSelected ? '1.5px solid rgba(255, 255, 255, 0.2)' : '1px solid var(--line)',
+                            boxShadow: isSelected ? 'var(--btn-rim-light), 0 4px 12px rgba(20, 36, 30, 0.16)' : '0 1px 2px rgba(0, 0, 0, 0.03)',
                             padding: '10px 12px',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--btn-tile-radius)',
                             textAlign: 'left',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            transition: 'all 0.18s ease'
                           }}
                         >
                           <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '2px' }}>
@@ -756,7 +696,8 @@ export default function PatientDashboard({
                   type="button"
                   onClick={() => setReschedulingSession(null)}
                   disabled={rescheduleSubmitting}
-                  style={{ background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                  className="btn-sanctuary-secondary"
+                  style={{ padding: '0.55rem 1.25rem', fontSize: '13px' }}
                 >
                   Cancel
                 </button>
@@ -764,16 +705,8 @@ export default function PatientDashboard({
                   type="button"
                   onClick={handleConfirmReschedule}
                   disabled={!selectedRescheduleSlot || rescheduleSubmitting}
-                  style={{
-                    background: selectedRescheduleSlot ? 'var(--acc)' : 'var(--off)',
-                    color: selectedRescheduleSlot ? '#fff' : 'var(--mut)',
-                    border: 'none',
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: selectedRescheduleSlot ? 'pointer' : 'not-allowed'
-                  }}
+                  className="btn-sanctuary-primary"
+                  style={{ padding: '0.55rem 1.45rem', fontSize: '13px' }}
                 >
                   {rescheduleSubmitting ? 'Rescheduling...' : 'Confirm Move'}
                 </button>

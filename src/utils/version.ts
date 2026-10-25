@@ -18,8 +18,8 @@ export interface AppVersionInfo {
 let cachedVersionInfo: AppVersionInfo | null = null;
 
 export function getAppVersionInfo(): AppVersionInfo {
-  // Return cached in production, but in development refresh to track new commits
-  if (cachedVersionInfo && process.env.NODE_ENV === 'production') {
+  // Return cached version info immediately to avoid spawning git sub-processes on each request
+  if (cachedVersionInfo) {
     return cachedVersionInfo;
   }
 

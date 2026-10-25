@@ -11,7 +11,7 @@ describe('Reschedule and Cancellation Policy', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (app) await app.close();

@@ -432,16 +432,7 @@ export default function TodayPage() {
                   <button
                     onClick={() => handleRejectPatient(patient.id)}
                     disabled={actionLoading === patient.id}
-                    style={{
-                      background: 'var(--off)',
-                      border: '1px solid var(--line)',
-                      color: 'var(--mut)',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
+                    className="btn-admin-secondary"
                   >
                     Decline
                   </button>
@@ -449,19 +440,7 @@ export default function TodayPage() {
                   <button
                     onClick={() => handleApprovePatient(patient.id)}
                     disabled={actionLoading === patient.id}
-                    style={{
-                      background: 'var(--acc)',
-                      border: 'none',
-                      color: '#fff',
-                      padding: '8px 14px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
+                    className="btn-admin-primary"
                   >
                     <CheckCircle className="w-4 h-4" />
                     {actionLoading === patient.id ? 'Approving...' : 'Approve Patient'}
