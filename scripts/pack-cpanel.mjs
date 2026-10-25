@@ -132,7 +132,26 @@ const appNodeModules = path.join(appDir, 'node_modules');
 process.env.NODE_PATH = [appNodeModules, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
 require('node:module').Module._initPaths();
 
-// 2. Ensure persistent storage folders exist at root
+// 2. Load .env file from application root, parent, or app subfolder first
+try {
+  const dotenvPath = path.join(appNodeModules, 'dotenv');
+  if (fs.existsSync(dotenvPath)) {
+    const candidates = [
+      path.join(__dirname, '.env'),
+      path.join(appDir, '.env'),
+      path.resolve(__dirname, '..', '.env')
+    ];
+    for (const envFile of candidates) {
+      if (fs.existsSync(envFile)) {
+        require(dotenvPath).config({ path: envFile, override: true });
+        console.log('[cPanel Startup] Loaded environment from:', envFile);
+        break;
+      }
+    }
+  }
+} catch (_) {}
+
+// 3. Ensure persistent storage folders exist at root
 const persistentDataDir = path.join(__dirname, 'data');
 const persistentUploadsDir = path.join(__dirname, 'uploads');
 try {
@@ -142,24 +161,10 @@ try {
   console.warn('Could not create storage directories:', e);
 }
 
-// 3. Set DATA_DIR to root data directory if not already set
+// 4. Set DATA_DIR to root data directory if not already set by .env or cPanel UI
 if (!process.env.DATA_DIR) {
   process.env.DATA_DIR = persistentDataDir;
 }
-
-// 4. Load .env file from application root or app subfolder
-try {
-  const dotenvPath = path.join(appNodeModules, 'dotenv');
-  if (fs.existsSync(dotenvPath)) {
-    const rootEnv = path.join(__dirname, '.env');
-    const appEnv = path.join(appDir, '.env');
-    if (fs.existsSync(rootEnv)) {
-      require(dotenvPath).config({ path: rootEnv });
-    } else if (fs.existsSync(appEnv)) {
-      require(dotenvPath).config({ path: appEnv });
-    }
-  }
-} catch (_) {}
 
 // 5. Switch working directory to app/
 try {
