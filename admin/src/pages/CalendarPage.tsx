@@ -18,16 +18,18 @@ import {
   AlertCircle, 
   Eye, 
   EyeOff,
-  CreditCard
+  CreditCard,
+  Calendar as CalendarIcon
 } from 'lucide-react';
+import { ClientSearchSelect, type ClientItem } from '../components/ClientSearchSelect';
 
-interface ClientItem {
-  id: number;
-  displayName: string;
-  phoneE164: string;
-  email?: string;
-  isVerified?: boolean;
-}
+const BLOCK_REASON_PRESETS = [
+  'Personal Off / Maintenance',
+  'Lunch / Rest Break',
+  'Administrative Work',
+  'Clinical Supervision',
+  'Out of Office / Leave',
+];
 
 export default function CalendarPage() {
   const [guestPreview, setGuestPreview] = useState(false);
@@ -37,8 +39,16 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<any[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
 
-  // Self-Booking Modal State
-  const [selfBookModal, setSelfBookModal] = useState(false);
+  // UNIFIED SLOT ACTION MODAL STATE
+  const [slotModalOpen, setSlotModalOpen] = useState(false);
+  const [slotModalTab, setSlotModalTab] = useState<'quick_slot' | 'block_time' | 'weekly_series'>('quick_slot');
+  const [selectedSlotDisplay, setSelectedSlotDisplay] = useState<{
+    dateLabel: string;
+    timeLabel: string;
+    durationLabel: string;
+  } | null>(null);
+
+  // Quick Slot / Patient Booking State
   const [useExistingClient, setUseExistingClient] = useState(true);
   const [selectedClientId, setSelectedClientId] = useState<number | ''>('');
   const [newClientName, setNewClientName] = useState('');
@@ -49,8 +59,21 @@ export default function CalendarPage() {
   const [bookingNote, setBookingNote] = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
 
+  // Block Out Time State
+  const [blockStart, setBlockStart] = useState('');
+  const [blockEnd, setBlockEnd] = useState('');
+  const [blockReason, setBlockReason] = useState('Personal Off / Maintenance');
+  const [blockLoading, setBlockLoading] = useState(false);
+
+  // Selected Block Details Modal State (when clicking on a blocked event on the grid)
+  const [selectedBlock, setSelectedBlock] = useState<{
+    id: number;
+    reason: string;
+    start: string;
+    end: string;
+  } | null>(null);
+
   // Recurring Series Modal State
-  const [seriesModal, setSeriesModal] = useState(false);
   const [seriesClientId, setSeriesClientId] = useState<number | ''>('');
   const [seriesWeekday, setSeriesWeekday] = useState<number>(1); // Monday default
   const [seriesStartTime, setSeriesStartTime] = useState('10:00');
@@ -73,12 +96,6 @@ export default function CalendarPage() {
     actionDescription: string;
   } | null>(null);
 
-  // Block Out Time Modal State
-  const [blockModal, setBlockModal] = useState(false);
-  const [blockStart, setBlockStart] = useState('');
-  const [blockEnd, setBlockEnd] = useState('');
-  const [blockReason, setBlockReason] = useState('Personal Off / Maintenance');
-
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const calendarRef = useRef<FullCalendar>(null);
 
@@ -87,76 +104,115 @@ export default function CalendarPage() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Load clients and sessions
-  const loadSessions = () => {
+  // Load clients, sessions, and blocks
+  const loadSessions = async () => {
     const start = new Date();
     start.setDate(start.getDate() - 30);
     const end = new Date();
     end.setDate(end.getDate() + 45);
 
-    fetch(`/api/admin/sessions?start=${start.toISOString()}&end=${end.toISOString()}`)
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const calendarEvents: any[] = [];
-          data.forEach(d => {
-            if (d.status === 'cancelled') return;
+    try {
+      const [sessionsRes, blocksRes] = await Promise.all([
+        fetch(`/api/admin/sessions?start=${start.toISOString()}&end=${end.toISOString()}`),
+        fetch('/api/admin/blocks')
+      ]);
 
-            const startMs = new Date(d.start).getTime();
-            const endMs = startMs + d.durationMin * 60000;
+      const sessionsData = await sessionsRes.json();
+      const blocksData = await blocksRes.json();
 
-            // Pick colors by status
-            let bg = '#2f6b5c';
-            let border = '#1d4239';
-            if (d.status === 'attended') {
-              bg = '#2563eb';
-              border = '#1d4ed8';
-            } else if (d.status === 'no_show') {
-              bg = '#dc2626';
-              border = '#b91c1c';
-            } else if (d.status === 'awaiting_payment' || d.status === 'held') {
-              bg = '#d97706';
-              border = '#b45309';
-            } else if (d.status === 'needs_review') {
-              bg = '#9333ea';
-              border = '#7e22ce';
-            } else if (d.feeWaived) {
-              bg = '#3a7262';
-              border = '#24483e';
+      const calendarEvents: any[] = [];
+
+      // 1. Process Sessions
+      if (Array.isArray(sessionsData)) {
+        sessionsData.forEach(d => {
+          if (d.status === 'cancelled') return;
+
+          const startMs = new Date(d.start).getTime();
+          const endMs = startMs + d.durationMin * 60000;
+
+          // Pick colors by status
+          let bg = '#2f6b5c';
+          let border = '#1d4239';
+          if (d.status === 'attended') {
+            bg = '#2563eb';
+            border = '#1d4ed8';
+          } else if (d.status === 'no_show') {
+            bg = '#dc2626';
+            border = '#b91c1c';
+          } else if (d.status === 'awaiting_payment' || d.status === 'held') {
+            bg = '#d97706';
+            border = '#b45309';
+          } else if (d.status === 'needs_review') {
+            bg = '#9333ea';
+            border = '#7e22ce';
+          } else if (d.feeWaived) {
+            bg = '#3a7262';
+            border = '#24483e';
+          }
+
+          calendarEvents.push({
+            id: String(d.id),
+            title: `${d.clientName || 'Session'} (${d.status.replace('_', ' ')})`,
+            start: d.start,
+            end: new Date(endMs).toISOString(),
+            backgroundColor: bg,
+            borderColor: border,
+            extendedProps: {
+              rawSession: d,
+              clientId: d.clientId,
+              clientName: d.clientName,
+              clientPhone: d.clientPhone,
+              clientEmail: d.clientEmail,
+              status: d.status,
+              feeWaived: d.feeWaived,
+              isBuffer: false,
+              isBlock: false,
             }
-
-            calendarEvents.push({
-              id: String(d.id),
-              title: `${d.clientName || 'Session'} (${d.status.replace('_', ' ')})`,
-              start: d.start,
-              end: new Date(endMs).toISOString(),
-              backgroundColor: bg,
-              borderColor: border,
-              extendedProps: {
-                rawSession: d,
-                clientId: d.clientId,
-                clientName: d.clientName,
-                clientPhone: d.clientPhone,
-                clientEmail: d.clientEmail,
-                status: d.status,
-                feeWaived: d.feeWaived,
-                isBuffer: false,
-              }
-            });
-
-            // 10-minute Hatched Buffer
-            calendarEvents.push({
-              id: `buffer-${d.id}`,
-              start: new Date(endMs).toISOString(),
-              end: new Date(endMs + 10 * 60000).toISOString(),
-              editable: false,
-              classNames: ['buffer-event'],
-              extendedProps: { isBuffer: true }
-            });
           });
-          setEvents(calendarEvents);
-        }
-      });
+
+          // 10-minute Hatched Buffer
+          calendarEvents.push({
+            id: `buffer-${d.id}`,
+            start: new Date(endMs).toISOString(),
+            end: new Date(endMs + 10 * 60000).toISOString(),
+            editable: false,
+            classNames: ['buffer-event'],
+            extendedProps: { isBuffer: true, isBlock: false }
+          });
+        });
+      }
+
+      // 2. Process Blocks (Blocked Time Ranges)
+      if (Array.isArray(blocksData)) {
+        blocksData.forEach(b => {
+          const startStr = typeof b.startUtc === 'string' ? b.startUtc : new Date(b.startUtc).toISOString();
+          const endStr = typeof b.endUtc === 'string' ? b.endUtc : new Date(b.endUtc).toISOString();
+          calendarEvents.push({
+            id: `block-${b.id}`,
+            title: `🚫 ${b.reason || 'Blocked Time'}`,
+            start: startStr,
+            end: endStr,
+            backgroundColor: '#475569',
+            borderColor: '#334155',
+            classNames: ['blocked-time-event'],
+            editable: false,
+            extendedProps: {
+              isBuffer: false,
+              isBlock: true,
+              blockId: b.id,
+              reason: b.reason || 'Blocked Time',
+              startUtc: startStr,
+              endUtc: endStr,
+            }
+          });
+        });
+      }
+
+      setEvents(calendarEvents);
+    } catch (err: any) {
+      console.error('Failed to load sessions/blocks:', err);
+      showToast('Error loading schedule events.', 'error');
+    }
   };
 
   useEffect(() => {
@@ -167,6 +223,64 @@ export default function CalendarPage() {
         if (Array.isArray(data)) setClients(data);
       });
   }, []);
+
+  // Handle slot selection (either click or drag range)
+  const handleSlotSelect = (start: Date, end: Date, defaultTab?: 'quick_slot' | 'block_time' | 'weekly_series') => {
+    if (guestPreview) return;
+
+    // Convert start and end to datetime-local strings
+    const startIsoLocal = new Date(start.getTime() - start.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const endIsoLocal = new Date(end.getTime() - end.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const durationMin = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
+
+    setSelectedSlotDisplay({
+      dateLabel: start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+      timeLabel: `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+      durationLabel: `${durationMin} min`,
+    });
+
+    // Pre-fill booking fields
+    setBookingStartUtc(startIsoLocal);
+    setBookingDuration(durationMin >= 90 ? 90 : (durationMin <= 30 ? 30 : 60));
+
+    // Pre-fill block time fields
+    setBlockStart(startIsoLocal);
+    setBlockEnd(endIsoLocal);
+
+    // Pre-fill series fields
+    setSeriesWeekday(start.getDay());
+    setSeriesStartTime(start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+    setSeriesStartsOn(start.toISOString().slice(0, 10));
+    setSeriesDuration(durationMin >= 90 ? 90 : 60);
+
+    if (defaultTab) {
+      setSlotModalTab(defaultTab);
+    }
+
+    setSlotModalOpen(true);
+  };
+
+  // Header quick launcher helpers
+  const openHeaderQuickSlot = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    const end = new Date(now.getTime() + 60 * 60000);
+    handleSlotSelect(now, end, 'quick_slot');
+  };
+
+  const openHeaderBlockTime = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    const end = new Date(now.getTime() + 60 * 60000);
+    handleSlotSelect(now, end, 'block_time');
+  };
+
+  const openHeaderWeeklySeries = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    const end = new Date(now.getTime() + 60 * 60000);
+    handleSlotSelect(now, end, 'weekly_series');
+  };
 
   // Self-Book submission
   const handleSelfBookSubmit = async (e: React.FormEvent) => {
@@ -212,7 +326,7 @@ export default function CalendarPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to self-book session');
 
       showToast('Session confirmed! Payment verification waived.');
-      setSelfBookModal(false);
+      setSlotModalOpen(false);
       setNewClientName('');
       setNewClientPhone('');
       setNewClientEmail('');
@@ -222,6 +336,59 @@ export default function CalendarPage() {
       showToast(err.message, 'error');
     } finally {
       setBookingLoading(false);
+    }
+  };
+
+  // Block out time submission
+  const handleBlockSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!blockStart || !blockEnd) {
+      showToast('Please select both start and end time.', 'error');
+      return;
+    }
+    setBlockLoading(true);
+    try {
+      const res = await fetch('/api/admin/blocks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startUtc: new Date(blockStart).toISOString(),
+          endUtc: new Date(blockEnd).toISOString(),
+          reason: blockReason,
+        }),
+      });
+      if (res.ok) {
+        showToast('Time range successfully blocked out.');
+        setSlotModalOpen(false);
+        loadSessions();
+      } else {
+        showToast('Failed to block time.', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setBlockLoading(false);
+    }
+  };
+
+  // Delete Block (Unblock slot)
+  const handleDeleteBlock = async (blockId: number) => {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/admin/blocks/${blockId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        showToast('Time slot unblocked and now available.');
+        setSelectedBlock(null);
+        loadSessions();
+      } else {
+        showToast('Failed to delete block', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -252,7 +419,7 @@ export default function CalendarPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to create series');
 
       showToast(`Recurring series created! Materialized ${data.materializedCount} sessions.`);
-      setSeriesModal(false);
+      setSlotModalOpen(false);
       loadSessions();
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -361,37 +528,9 @@ export default function CalendarPage() {
     }
   };
 
-  // Block out time
-  const handleBlockSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!blockStart || !blockEnd) {
-      showToast('Please select both start and end time.', 'error');
-      return;
-    }
-    try {
-      const res = await fetch('/api/admin/blocks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          startUtc: new Date(blockStart).toISOString(),
-          endUtc: new Date(blockEnd).toISOString(),
-          reason: blockReason,
-        }),
-      });
-      if (res.ok) {
-        showToast('Time range successfully blocked out.');
-        setBlockModal(false);
-      } else {
-        showToast('Failed to block time.', 'error');
-      }
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    }
-  };
-
   // Drag and drop reschedule
   const handleEventDrop = (info: any) => {
-    if (guestPreview) {
+    if (guestPreview || info.event.extendedProps.isBlock || info.event.extendedProps.isBuffer) {
       info.revert();
       return;
     }
@@ -423,7 +562,7 @@ export default function CalendarPage() {
 
   // Pull bottom edge to resize duration
   const handleEventResize = (info: any) => {
-    if (guestPreview) {
+    if (guestPreview || info.event.extendedProps.isBlock || info.event.extendedProps.isBuffer) {
       info.revert();
       return;
     }
@@ -606,98 +745,66 @@ export default function CalendarPage() {
           <div>
             <h1 style={{ fontSize: '20px', margin: 0, color: 'var(--ink)' }}>Clinical Timetable & Schedule</h1>
             <div className="sub" style={{ color: 'var(--mut)', fontSize: '13px' }}>
-              Full drag-and-drop calendar · 10-min post-session buffers · Ethiopian calendar headers
+              Click or drag any slot to schedule patients, block time, or create weekly series.
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <Link
               to="/intake"
+              className="btn-admin-primary"
               style={{
-                background: 'var(--acc)',
-                color: '#fff',
-                border: 'none',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '13px',
                 textDecoration: 'none',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                padding: '7px 14px',
+                fontSize: '13px'
               }}
             >
               <UserPlus className="w-4 h-4" /> New Patient Intake
             </Link>
 
             <button
-              onClick={() => {
-                const now = new Date();
-                now.setMinutes(0, 0, 0);
-                const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-                setBookingStartUtc(localIso);
-                setSelfBookModal(true);
-              }}
+              onClick={openHeaderQuickSlot}
+              className="btn-admin-secondary"
               style={{
-                background: 'var(--card)',
-                color: 'var(--ink)',
-                border: '1px solid var(--line)',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                fontWeight: 500,
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                padding: '7px 14px',
+                fontSize: '13px'
               }}
             >
-              <Plus className="w-4 h-4" /> Quick Slot
+              <Plus className="w-4 h-4 text-acc" /> Quick Slot
             </button>
 
             <button
-              onClick={() => setSeriesModal(true)}
+              onClick={openHeaderBlockTime}
+              className="btn-admin-secondary"
               style={{
-                background: 'var(--card)',
-                color: 'var(--ink)',
-                border: '1px solid var(--line)',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                padding: '7px 14px',
+                fontSize: '13px'
+              }}
+            >
+              <Ban className="w-4 h-4" style={{ color: '#dc2626' }} /> Block Time
+            </button>
+
+            <button
+              onClick={openHeaderWeeklySeries}
+              className="btn-admin-secondary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 14px',
+                fontSize: '13px'
               }}
             >
               <Repeat className="w-4 h-4 text-acc" /> Weekly Series
-            </button>
-
-            <button
-              onClick={() => {
-                const now = new Date();
-                const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-                setBlockStart(localIso);
-                setBlockEnd(localIso);
-                setBlockModal(true);
-              }}
-              style={{
-                background: 'var(--off)',
-                color: 'var(--ink)',
-                border: '1px solid var(--line)',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <Ban className="w-4 h-4" /> Block Time
             </button>
           </div>
         </div>
@@ -773,8 +880,28 @@ export default function CalendarPage() {
           events={events}
           eventDrop={handleEventDrop}
           eventResize={handleEventResize}
+          select={(selectionInfo) => {
+            if (guestPreview) return;
+            handleSlotSelect(selectionInfo.start, selectionInfo.end);
+            calendarRef.current?.getApi().unselect();
+          }}
+          dateClick={(info) => {
+            if (guestPreview) return;
+            const start = info.date;
+            const end = new Date(start.getTime() + 60 * 60000);
+            handleSlotSelect(start, end);
+          }}
           eventClick={(info) => {
             if (info.event.extendedProps.isBuffer) return;
+            if (info.event.extendedProps.isBlock) {
+              setSelectedBlock({
+                id: info.event.extendedProps.blockId,
+                reason: info.event.extendedProps.reason,
+                start: info.event.extendedProps.startUtc,
+                end: info.event.extendedProps.endUtc,
+              });
+              return;
+            }
             const raw = info.event.extendedProps.rawSession || {
               id: info.event.id,
               clientName: info.event.extendedProps.clientName,
@@ -785,12 +912,6 @@ export default function CalendarPage() {
               start: info.event.startStr,
             };
             setSelectedSession(raw);
-          }}
-          dateClick={(info) => {
-            if (guestPreview) return;
-            const localIso = new Date(info.date.getTime() - info.date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-            setBookingStartUtc(localIso);
-            setSelfBookModal(true);
           }}
           dayHeaderContent={(args) => {
             const ethiopianDate = new Intl.DateTimeFormat('en-u-ca-ethiopic', { day: 'numeric', month: 'short' }).format(args.date);
@@ -805,6 +926,20 @@ export default function CalendarPage() {
           }}
           eventContent={(arg) => {
             if (arg.event.extendedProps.isBuffer) return <></>;
+            if (arg.event.extendedProps.isBlock) {
+              return (
+                <div style={{ padding: '3px 4px', cursor: 'pointer', height: '100%', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <strong style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--ink)' }}>
+                      {guestPreview ? 'Unavailable / Blocked' : `🚫 ${arg.event.extendedProps.reason}`}
+                    </strong>
+                  </div>
+                  <small style={{ display: 'block', opacity: 0.85, fontSize: '10px', color: 'var(--mut)' }}>
+                    {arg.timeText}
+                  </small>
+                </div>
+              );
+            }
             return (
               <div style={{ padding: '2px', cursor: 'pointer' }}>
                 <strong style={{ display: 'block', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -819,297 +954,527 @@ export default function CalendarPage() {
         />
       </div>
 
-      {/* MODAL 1: SELF-BOOKING MODAL */}
-      {selfBookModal && (
+      {/* UNIFIED MODAL: MANAGE TIME SLOT (QUICK SLOT / BLOCK TIME / WEEKLY SERIES) */}
+      {slotModalOpen && (
         <div className="admin-modal-backdrop">
-          <div className="admin-modal-card" style={{ padding: '1.75rem', maxWidth: '540px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+          <div className="admin-modal-card" style={{ padding: '1.75rem', maxWidth: '560px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--ink)' }}>Self-Book Consultation</h3>
-                <span style={{ fontSize: '12px', color: 'var(--acc)', fontWeight: 600 }}>
-                  Payment verification waived for admin self-bookings.
+                <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--ink)' }}>Schedule Time Slot</h3>
+                <span style={{ fontSize: '12px', color: 'var(--mut)' }}>
+                  Choose an action for this selected calendar time slot
                 </span>
               </div>
-              <button onClick={() => setSelfBookModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--mut)' }}>
+              <button
+                onClick={() => setSlotModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--mut)', padding: '4px' }}
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSelfBookSubmit}>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setUseExistingClient(true)}
-                  style={{
-                    flex: 1,
-                    padding: '8px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--line)',
-                    background: useExistingClient ? 'var(--acc)' : 'var(--card)',
-                    color: useExistingClient ? '#fff' : 'var(--ink)',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Existing Client
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUseExistingClient(false)}
-                  style={{
-                    flex: 1,
-                    padding: '8px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--line)',
-                    background: !useExistingClient ? 'var(--acc)' : 'var(--card)',
-                    color: !useExistingClient ? '#fff' : 'var(--ink)',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  New Client
-                </button>
-              </div>
-
-              {useExistingClient ? (
-                <div className="admin-form-group">
-                  <label className="admin-label">Select Client</label>
-                  <select
-                    value={selectedClientId}
-                    onChange={e => setSelectedClientId(e.target.value ? Number(e.target.value) : '')}
-                    className="admin-select"
-                    required
-                  >
-                    <option value="">-- Choose client --</option>
-                    {clients.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.displayName} ({c.phoneE164}) {c.isVerified ? '★ Verified' : ''}
-                      </option>
-                    ))}
-                  </select>
+            {/* Selected Slot Time Banner */}
+            {selectedSlotDisplay && (
+              <div className="slot-action-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CalendarIcon className="w-4 h-4 text-acc" />
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '13px', color: 'var(--ink)' }}>
+                      {selectedSlotDisplay.dateLabel}
+                    </strong>
+                    <span style={{ fontSize: '12px', color: 'var(--mut)' }}>
+                      {selectedSlotDisplay.timeLabel}
+                    </span>
+                  </div>
                 </div>
-              ) : (
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  background: 'var(--card)',
+                  color: 'var(--acc)',
+                  border: '1px solid rgba(36, 87, 74, 0.2)'
+                }}>
+                  {selectedSlotDisplay.durationLabel}
+                </span>
+              </div>
+            )}
+
+            {/* 3 Main Action Mode Tabs */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem' }}>
+              <button
+                type="button"
+                onClick={() => setSlotModalTab('quick_slot')}
+                style={{
+                  flex: 1,
+                  padding: '10px 8px',
+                  borderRadius: '8px',
+                  border: '1.5px solid',
+                  borderColor: slotModalTab === 'quick_slot' ? 'var(--acc)' : 'var(--line)',
+                  background: slotModalTab === 'quick_slot' ? 'var(--accbg)' : 'var(--card)',
+                  color: slotModalTab === 'quick_slot' ? 'var(--acct)' : 'var(--mut)',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <UserPlus className="w-4 h-4" /> Quick Slot
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSlotModalTab('block_time')}
+                style={{
+                  flex: 1,
+                  padding: '10px 8px',
+                  borderRadius: '8px',
+                  border: '1.5px solid',
+                  borderColor: slotModalTab === 'block_time' ? '#ef4444' : 'var(--line)',
+                  background: slotModalTab === 'block_time' ? 'rgba(239, 68, 68, 0.08)' : 'var(--card)',
+                  color: slotModalTab === 'block_time' ? '#b91c1c' : 'var(--mut)',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Ban className="w-4 h-4" /> Block Out Time
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSlotModalTab('weekly_series')}
+                style={{
+                  flex: 1,
+                  padding: '10px 8px',
+                  borderRadius: '8px',
+                  border: '1.5px solid',
+                  borderColor: slotModalTab === 'weekly_series' ? 'var(--acc)' : 'var(--line)',
+                  background: slotModalTab === 'weekly_series' ? 'var(--accbg)' : 'var(--card)',
+                  color: slotModalTab === 'weekly_series' ? 'var(--acct)' : 'var(--mut)',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Repeat className="w-4 h-4" /> Weekly Series
+              </button>
+            </div>
+
+            {/* TAB 1: QUICK SLOT (PATIENT) */}
+            {slotModalTab === 'quick_slot' && (
+              <form onSubmit={handleSelfBookSubmit}>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem', background: 'var(--off)', padding: '4px', borderRadius: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setUseExistingClient(true)}
+                    style={{
+                      flex: 1,
+                      padding: '7px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: useExistingClient ? 'var(--card)' : 'transparent',
+                      color: useExistingClient ? 'var(--ink)' : 'var(--mut)',
+                      fontWeight: useExistingClient ? 700 : 500,
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      boxShadow: useExistingClient ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    }}
+                  >
+                    Existing Patient
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUseExistingClient(false)}
+                    style={{
+                      flex: 1,
+                      padding: '7px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: !useExistingClient ? 'var(--card)' : 'transparent',
+                      color: !useExistingClient ? 'var(--ink)' : 'var(--mut)',
+                      fontWeight: !useExistingClient ? 700 : 500,
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      boxShadow: !useExistingClient ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    }}
+                  >
+                    + Add New Patient
+                  </button>
+                </div>
+
+                {useExistingClient ? (
+                  <div className="admin-form-group">
+                    <ClientSearchSelect
+                      clients={clients}
+                      value={selectedClientId}
+                      onChange={setSelectedClientId}
+                      label="Select Existing Patient *"
+                      onSwitchToNewClient={(prefillName) => {
+                        setNewClientName(prefillName);
+                        setUseExistingClient(false);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1rem' }}>
+                    <div>
+                      <label className="admin-label">Patient Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Abebe Bikila"
+                        value={newClientName}
+                        onChange={e => setNewClientName(e.target.value)}
+                        className="admin-input"
+                      />
+                    </div>
+                    <div>
+                      <label className="admin-label">Phone Number *</label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="e.g. 0911234567"
+                        value={newClientPhone}
+                        onChange={e => setNewClientPhone(e.target.value)}
+                        className="admin-input"
+                      />
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label className="admin-label">Email (Optional)</label>
+                      <input
+                        type="email"
+                        placeholder="patient@example.com"
+                        value={newClientEmail}
+                        onChange={e => setNewClientEmail(e.target.value)}
+                        className="admin-input"
+                      />
+                    </div>
+                    <div style={{ gridColumn: 'span 2', padding: '8px 10px', background: 'var(--line-subtle)', borderRadius: '6px', fontSize: '12px', color: 'var(--mut)' }}>
+                      Need complete clinical onboarding with private reschedule tokens & medical intake?{' '}
+                      <Link to="/intake" onClick={() => setSlotModalOpen(false)} style={{ color: 'var(--acc)', fontWeight: 600, textDecoration: 'none' }}>
+                        Open Full Patient Intake →
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px', marginBottom: '1rem' }}>
+                  <div>
+                    <label className="admin-label">Start Time (Local)</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={bookingStartUtc}
+                      onChange={e => setBookingStartUtc(e.target.value)}
+                      className="admin-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="admin-label">Duration</label>
+                    <select
+                      value={bookingDuration}
+                      onChange={e => setBookingDuration(Number(e.target.value))}
+                      className="admin-select"
+                    >
+                      <option value={30}>30 Min</option>
+                      <option value={60}>60 Min (1 hr)</option>
+                      <option value={90}>90 Min (1.5 hr)</option>
+                      <option value={120}>120 Min (2 hr)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="admin-form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="admin-label">Private Clinical / Admin Note</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. In-person consultation, referral follow-up"
+                    value={bookingNote}
+                    onChange={e => setBookingNote(e.target.value)}
+                    className="admin-input"
+                  />
+                </div>
+
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '10px 12px', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '12px', color: '#166534' }}>
+                  <strong>Direct Scheduling:</strong> Payment verification is automatically waived for clinical self-bookings. The appointment is immediately confirmed.
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSlotModalOpen(false)}
+                    className="btn-admin-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={bookingLoading}
+                    className="btn-admin-primary"
+                  >
+                    {bookingLoading ? 'Scheduling...' : 'Confirm Patient Slot'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* TAB 2: BLOCK OUT TIME */}
+            {slotModalTab === 'block_time' && (
+              <form onSubmit={handleBlockSubmit}>
+                <p style={{ color: 'var(--mut)', fontSize: '13px', margin: '0 0 1rem' }}>
+                  Blocked times prevent clients from booking this slot and appear as unavailable on your clinical timetable.
+                </p>
+
+                {/* Quick Reason Presets */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <label className="admin-label">Quick Reason Presets</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {BLOCK_REASON_PRESETS.map(preset => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setBlockReason(preset)}
+                        className={`preset-chip ${blockReason === preset ? 'active' : ''}`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="admin-form-group">
+                  <label className="admin-label">Reason / Label *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Personal Time, Maintenance, Clinical Supervision"
+                    value={blockReason}
+                    onChange={e => setBlockReason(e.target.value)}
+                    className="admin-input"
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1.25rem' }}>
+                  <div>
+                    <label className="admin-label">Block Start (Local)</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={blockStart}
+                      onChange={e => setBlockStart(e.target.value)}
+                      className="admin-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="admin-label">Block End (Local)</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={blockEnd}
+                      onChange={e => setBlockEnd(e.target.value)}
+                      className="admin-input"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSlotModalOpen(false)}
+                    className="btn-admin-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={blockLoading}
+                    className="btn-admin-danger"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Ban className="w-4 h-4" />
+                    {blockLoading ? 'Blocking...' : 'Block This Time Slot'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* TAB 3: WEEKLY RECURRING SERIES */}
+            {slotModalTab === 'weekly_series' && (
+              <form onSubmit={handleSeriesSubmit}>
+                <p style={{ color: 'var(--mut)', fontSize: '13px', margin: '0 0 1rem' }}>
+                  Establish recurring weekly appointments for regular patients at this exact day and time up to the horizon.
+                </p>
+
+                <div className="admin-form-group">
+                  <ClientSearchSelect
+                    clients={clients}
+                    value={seriesClientId}
+                    onChange={setSeriesClientId}
+                    label="Select Patient for Series *"
+                    placeholder="Search by name, phone (+251...), or email..."
+                    required
+                  />
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1rem' }}>
                   <div>
-                    <label className="admin-label">Preferred Name *</label>
+                    <label className="admin-label">Day of Week</label>
+                    <select
+                      value={seriesWeekday}
+                      onChange={e => setSeriesWeekday(Number(e.target.value))}
+                      className="admin-select"
+                    >
+                      {weekDayOptions.map(w => (
+                        <option key={w.value} value={w.value}>{w.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="admin-label">Start Time (Local)</label>
                     <input
-                      type="text"
+                      type="time"
                       required
-                      placeholder="Client Name"
-                      value={newClientName}
-                      onChange={e => setNewClientName(e.target.value)}
+                      value={seriesStartTime}
+                      onChange={e => setSeriesStartTime(e.target.value)}
+                      className="admin-input"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '1.25rem' }}>
+                  <div>
+                    <label className="admin-label">Starts On *</label>
+                    <input
+                      type="date"
+                      required
+                      value={seriesStartsOn}
+                      onChange={e => setSeriesStartsOn(e.target.value)}
                       className="admin-input"
                     />
                   </div>
                   <div>
-                    <label className="admin-label">Phone Number *</label>
+                    <label className="admin-label">Ends On (Optional)</label>
                     <input
-                      type="tel"
-                      required
-                      placeholder="0911234567"
-                      value={newClientPhone}
-                      onChange={e => setNewClientPhone(e.target.value)}
+                      type="date"
+                      value={seriesEndsOn}
+                      onChange={e => setSeriesEndsOn(e.target.value)}
                       className="admin-input"
                     />
                   </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label className="admin-label">Email (Optional)</label>
-                    <input
-                      type="email"
-                      placeholder="client@example.com"
-                      value={newClientEmail}
-                      onChange={e => setNewClientEmail(e.target.value)}
-                      className="admin-input"
-                    />
-                  </div>
-                  <div style={{ gridColumn: 'span 2', padding: '8px 10px', background: 'var(--line-subtle)', borderRadius: '6px', fontSize: '12px', color: 'var(--mut)' }}>
-                    Need complete patient registration with private reschedule tokens?{' '}
-                    <Link to="/intake" onClick={() => setSelfBookModal(false)} style={{ color: 'var(--acc)', fontWeight: 600, textDecoration: 'none' }}>
-                      Open New Patient Intake →
-                    </Link>
+                  <div>
+                    <label className="admin-label">Duration</label>
+                    <select
+                      value={seriesDuration}
+                      onChange={e => setSeriesDuration(Number(e.target.value))}
+                      className="admin-select"
+                    >
+                      <option value={30}>30 Min</option>
+                      <option value={60}>60 Min (1 hr)</option>
+                      <option value={90}>90 Min (1.5 hr)</option>
+                    </select>
                   </div>
                 </div>
-              )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px', marginBottom: '1rem' }}>
-                <div>
-                  <label className="admin-label">Start Time (Local Date & Time)</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={bookingStartUtc}
-                    onChange={e => setBookingStartUtc(e.target.value)}
-                    className="admin-input"
-                  />
-                </div>
-                <div>
-                  <label className="admin-label">Duration</label>
-                  <select
-                    value={bookingDuration}
-                    onChange={e => setBookingDuration(Number(e.target.value))}
-                    className="admin-select"
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSlotModalOpen(false)}
+                    className="btn-admin-secondary"
                   >
-                    <option value={60}>60 Min (1 hr)</option>
-                    <option value={90}>90 Min</option>
-                  </select>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={seriesLoading}
+                    className="btn-admin-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Repeat className="w-4 h-4" />
+                    {seriesLoading ? 'Materializing...' : 'Create Weekly Series'}
+                  </button>
                 </div>
-              </div>
+              </form>
+            )}
 
-              <div className="admin-form-group" style={{ marginBottom: '1.5rem' }}>
-                <label className="admin-label">Private Admin Note</label>
-                <input
-                  type="text"
-                  placeholder="e.g. In-person intake, referral"
-                  value={bookingNote}
-                  onChange={e => setBookingNote(e.target.value)}
-                  className="admin-input"
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" onClick={() => setSelfBookModal(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--ink)', cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={bookingLoading}
-                  style={{
-                    background: 'var(--acc)',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {bookingLoading ? 'Reserving...' : 'Confirm Self-Booking'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: RECURRING WEEKLY SERIES MODAL */}
-      {seriesModal && (
+      {/* MODAL: BLOCKED TIME DETAILS (WHEN CLICKING AN EXISTING BLOCKED TIME) */}
+      {selectedBlock && (
         <div className="admin-modal-backdrop">
-          <div className="admin-modal-card" style={{ padding: '1.75rem', maxWidth: '500px', width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--ink)' }}>Create Recurring Series</h3>
-                <span style={{ fontSize: '12px', color: 'var(--mut)' }}>
-                  Schedules weekly appointments for regular clients up to horizon.
-                </span>
+          <div className="admin-modal-card" style={{ padding: '1.75rem', maxWidth: '440px', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ban className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', color: 'var(--ink)' }}>Blocked Time Range</h3>
+                  <span style={{ fontSize: '12px', color: 'var(--mut)' }}>Unavailable for public booking</span>
+                </div>
               </div>
-              <button onClick={() => setSeriesModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--mut)' }}>
+              <button
+                onClick={() => setSelectedBlock(null)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--mut)' }}
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSeriesSubmit}>
-              <div className="admin-form-group">
-                <label className="admin-label">Client</label>
-                <select
-                  value={seriesClientId}
-                  onChange={e => setSeriesClientId(e.target.value ? Number(e.target.value) : '')}
-                  className="admin-select"
-                  required
-                >
-                  <option value="">-- Choose client --</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.displayName} ({c.phoneE164}) {c.isVerified ? '★ Verified' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div style={{ background: 'var(--off)', padding: '1rem', borderRadius: '8px', marginBottom: '1.25rem', border: '1px solid var(--line)', fontSize: '13px' }}>
+              <p style={{ margin: '0 0 6px' }}><strong>Reason:</strong> {selectedBlock.reason}</p>
+              <p style={{ margin: '0 0 6px' }}>
+                <strong>Start:</strong> {new Date(selectedBlock.start).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </p>
+              <p style={{ margin: 0 }}>
+                <strong>End:</strong> {new Date(selectedBlock.end).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </p>
+            </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1rem' }}>
-                <div>
-                  <label className="admin-label">Day of Week</label>
-                  <select
-                    value={seriesWeekday}
-                    onChange={e => setSeriesWeekday(Number(e.target.value))}
-                    className="admin-select"
-                  >
-                    {weekDayOptions.map(w => (
-                      <option key={w.value} value={w.value}>{w.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="admin-label">Start Time (Local)</label>
-                  <input
-                    type="time"
-                    required
-                    value={seriesStartTime}
-                    onChange={e => setSeriesStartTime(e.target.value)}
-                    className="admin-input"
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '1.25rem' }}>
-                <div>
-                  <label className="admin-label">Starts On *</label>
-                  <input
-                    type="date"
-                    required
-                    value={seriesStartsOn}
-                    onChange={e => setSeriesStartsOn(e.target.value)}
-                    className="admin-input"
-                  />
-                </div>
-                <div>
-                  <label className="admin-label">Ends On (Optional)</label>
-                  <input
-                    type="date"
-                    value={seriesEndsOn}
-                    onChange={e => setSeriesEndsOn(e.target.value)}
-                    className="admin-input"
-                  />
-                </div>
-                <div>
-                  <label className="admin-label">Duration</label>
-                  <select
-                    value={seriesDuration}
-                    onChange={e => setSeriesDuration(Number(e.target.value))}
-                    className="admin-select"
-                  >
-                    <option value={60}>60 Min (1 hr)</option>
-                    <option value={90}>90 Min</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" onClick={() => setSeriesModal(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--ink)', cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={seriesLoading}
-                  style={{
-                    background: 'var(--acc)',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {seriesLoading ? 'Materializing...' : 'Create Series'}
-                </button>
-              </div>
-            </form>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => handleDeleteBlock(selectedBlock.id)}
+                disabled={actionLoading}
+                className="btn-admin-danger"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Trash2 className="w-4 h-4" />
+                {actionLoading ? 'Unblocking...' : 'Remove Block (Make Available)'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedBlock(null)}
+                className="btn-admin-secondary"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 3: SESSION DETAILS & ATTENDANCE ACTIONS */}
+      {/* MODAL: SESSION DETAILS & ATTENDANCE ACTIONS */}
       {selectedSession && (
         <div className="admin-modal-backdrop">
           <div className="admin-modal-card" style={{ padding: '1.75rem', maxWidth: '480px', width: '100%' }}>
@@ -1301,85 +1666,19 @@ export default function CalendarPage() {
                 type="button"
                 onClick={handleCancelSession}
                 disabled={actionLoading}
-                style={{
-                  background: 'var(--card)',
-                  color: '#dc2626',
-                  border: '1px solid #fecaca',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '13px',
-                }}
+                className="btn-admin-danger"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
                 <Trash2 className="w-4 h-4" /> Cancel Time
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedSession(null)}
-                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--ink)', fontSize: '13px', cursor: 'pointer' }}
+                className="btn-admin-secondary"
               >
                 Close
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 4: BLOCK OUT TIME */}
-      {blockModal && (
-        <div className="admin-modal-backdrop">
-          <div className="admin-modal-card" style={{ padding: '1.75rem', maxWidth: '480px', width: '100%' }}>
-            <h3 style={{ margin: '0 0 0.5rem', color: 'var(--ink)' }}>Block Out Time Slot</h3>
-            <p style={{ color: 'var(--mut)', fontSize: '13px', margin: '0 0 1.25rem' }}>
-              Blocked times cannot be booked by public clients and appear as unavailable.
-            </p>
-            <form onSubmit={handleBlockSubmit}>
-              <div className="admin-form-group">
-                <label className="admin-label">Start Time</label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={blockStart}
-                  onChange={e => setBlockStart(e.target.value)}
-                  className="admin-input"
-                />
-              </div>
-
-              <div className="admin-form-group">
-                <label className="admin-label">End Time</label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={blockEnd}
-                  onChange={e => setBlockEnd(e.target.value)}
-                  className="admin-input"
-                />
-              </div>
-
-              <div className="admin-form-group" style={{ marginBottom: '1.25rem' }}>
-                <label className="admin-label">Reason / Label</label>
-                <input
-                  type="text"
-                  required
-                  value={blockReason}
-                  onChange={e => setBlockReason(e.target.value)}
-                  className="admin-input"
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" onClick={() => setBlockModal(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--ink)', cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button type="submit" style={{ background: 'var(--acc)', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
-                  Save Block
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

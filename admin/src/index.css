@@ -474,6 +474,79 @@ html[data-theme="dark"] .admin-select {
   border-radius: 0 0 4px 4px !important;
 }
 
+.blocked-time-event {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(100, 116, 139, 0.16) 0 8px,
+    rgba(100, 116, 139, 0.28) 8px 16px
+  ), var(--card) !important;
+  border: 1.5px dashed #64748b !important;
+  color: var(--ink) !important;
+  cursor: pointer !important;
+  border-radius: 6px !important;
+  transition: transform 0.14s ease, box-shadow 0.14s ease !important;
+}
+
+.blocked-time-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+  border-color: #475569 !important;
+}
+
+html[data-theme="dark"] .blocked-time-event {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(148, 163, 184, 0.12) 0 8px,
+    rgba(148, 163, 184, 0.22) 8px 16px
+  ), var(--card) !important;
+  border-color: #64748b !important;
+  color: #e2e8f0 !important;
+}
+
+.calendar-wrap.guest-preview .fc-event.blocked-time-event {
+  background: var(--bf) !important;
+  border: 1px solid var(--mut) !important;
+}
+
+.slot-action-banner {
+  background: var(--accbg);
+  border: 1px solid rgba(36, 87, 74, 0.2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 1rem;
+}
+
+html[data-theme="dark"] .slot-action-banner {
+  background: rgba(36, 87, 74, 0.25);
+  border-color: rgba(111, 194, 171, 0.25);
+}
+
+.preset-chip {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.preset-chip:hover {
+  background: var(--line-subtle);
+  border-color: var(--acc);
+  color: var(--acc);
+}
+
+.preset-chip.active {
+  background: var(--accbg);
+  border-color: var(--acc);
+  color: var(--acct);
+  font-weight: 600;
+}
+
 .fc-theme-standard .fc-scrollgrid {
   border: none !important;
 }
