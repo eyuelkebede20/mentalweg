@@ -19,7 +19,9 @@ import {
   Eye, 
   EyeOff,
   CreditCard,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
 import { ClientSearchSelect, type ClientItem } from '../components/ClientSearchSelect';
 
@@ -41,12 +43,29 @@ export default function CalendarPage() {
 
   // UNIFIED SLOT ACTION MODAL STATE
   const [slotModalOpen, setSlotModalOpen] = useState(false);
-  const [slotModalTab, setSlotModalTab] = useState<'quick_slot' | 'block_time' | 'weekly_series'>('quick_slot');
+  const [slotModalTab, setSlotModalTab] = useState<'choose' | 'quick_slot' | 'block_time' | 'weekly_series'>('choose');
   const [selectedSlotDisplay, setSelectedSlotDisplay] = useState<{
     dateLabel: string;
     timeLabel: string;
     durationLabel: string;
+    ethiopianLabel?: string;
   } | null>(null);
+  const isSelectingRef = useRef(false);
+
+  const closeSlotModal = () => {
+    setSlotModalOpen(false);
+    calendarRef.current?.getApi().unselect();
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && slotModalOpen) {
+        closeSlotModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [slotModalOpen]);
 
   // Quick Slot / Patient Booking State
   const [useExistingClient, setUseExistingClient] = useState(true);
@@ -225,7 +244,7 @@ export default function CalendarPage() {
   }, []);
 
   // Handle slot selection (either click or drag range)
-  const handleSlotSelect = (start: Date, end: Date, defaultTab?: 'quick_slot' | 'block_time' | 'weekly_series') => {
+  const handleSlotSelect = (start: Date, end: Date, defaultTab?: 'choose' | 'quick_slot' | 'block_time' | 'weekly_series') => {
     if (guestPreview) return;
 
     // Convert start and end to datetime-local strings
@@ -233,15 +252,41 @@ export default function CalendarPage() {
     const endIsoLocal = new Date(end.getTime() - end.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     const durationMin = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
 
+    // Calculate Ethiopian Calendar display
+    let ethLabel = '';
+    try {
+      const ethDate = new Intl.DateTimeFormat('en-u-ca-ethiopic', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }).format(start);
+      const getEthH = (d: Date) => {
+        const h = d.getHours();
+        const ethH = ((h + 6) % 12) || 12;
+        const m = d.getMinutes().toString().padStart(2, '0');
+        return `${ethH}:${m}`;
+      };
+      ethLabel = `${ethDate} · ${getEthH(start)} – ${getEthH(end)} E.C.`;
+    } catch {
+      // fallback if not available
+    }
+
     setSelectedSlotDisplay({
       dateLabel: start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
       timeLabel: `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
       durationLabel: `${durationMin} min`,
+      ethiopianLabel: ethLabel,
     });
+
+    // Closest standard duration for series and booking forms
+    const standardDurations = [30, 45, 60, 75, 90, 120];
+    const closestDuration = standardDurations.reduce((prev, curr) =>
+      Math.abs(curr - durationMin) < Math.abs(prev - durationMin) ? curr : prev
+    );
 
     // Pre-fill booking fields
     setBookingStartUtc(startIsoLocal);
-    setBookingDuration(durationMin >= 90 ? 90 : (durationMin <= 30 ? 30 : 60));
+    setBookingDuration(durationMin <= 15 ? 30 : durationMin);
 
     // Pre-fill block time fields
     setBlockStart(startIsoLocal);
@@ -251,12 +296,9 @@ export default function CalendarPage() {
     setSeriesWeekday(start.getDay());
     setSeriesStartTime(start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
     setSeriesStartsOn(start.toISOString().slice(0, 10));
-    setSeriesDuration(durationMin >= 90 ? 90 : 60);
+    setSeriesDuration(closestDuration);
 
-    if (defaultTab) {
-      setSlotModalTab(defaultTab);
-    }
-
+    setSlotModalTab(defaultTab || 'choose');
     setSlotModalOpen(true);
   };
 
@@ -326,7 +368,7 @@ export default function CalendarPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to self-book session');
 
       showToast('Session confirmed! Payment verification waived.');
-      setSlotModalOpen(false);
+      closeSlotModal();
       setNewClientName('');
       setNewClientPhone('');
       setNewClientEmail('');
@@ -359,7 +401,7 @@ export default function CalendarPage() {
       });
       if (res.ok) {
         showToast('Time range successfully blocked out.');
-        setSlotModalOpen(false);
+        closeSlotModal();
         loadSessions();
       } else {
         showToast('Failed to block time.', 'error');
@@ -419,7 +461,7 @@ export default function CalendarPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to create series');
 
       showToast(`Recurring series created! Materialized ${data.materializedCount} sessions.`);
-      setSlotModalOpen(false);
+      closeSlotModal();
       loadSessions();
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -873,6 +915,9 @@ export default function CalendarPage() {
           editable={!guestPreview}
           selectable={!guestPreview}
           selectMirror={true}
+          selectMinDistance={4}
+          selectLongPressDelay={150}
+          unselectAuto={true}
           dayMaxEvents={true}
           weekends={true}
           snapDuration="00:15:00"
@@ -882,14 +927,17 @@ export default function CalendarPage() {
           eventResize={handleEventResize}
           select={(selectionInfo) => {
             if (guestPreview) return;
-            handleSlotSelect(selectionInfo.start, selectionInfo.end);
-            calendarRef.current?.getApi().unselect();
+            isSelectingRef.current = true;
+            handleSlotSelect(selectionInfo.start, selectionInfo.end, 'choose');
+            setTimeout(() => {
+              isSelectingRef.current = false;
+            }, 350);
           }}
           dateClick={(info) => {
-            if (guestPreview) return;
+            if (guestPreview || isSelectingRef.current) return;
             const start = info.date;
             const end = new Date(start.getTime() + 60 * 60000);
-            handleSlotSelect(start, end);
+            handleSlotSelect(start, end, 'choose');
           }}
           eventClick={(info) => {
             if (info.event.extendedProps.isBuffer) return;
@@ -956,7 +1004,12 @@ export default function CalendarPage() {
 
       {/* UNIFIED MODAL: MANAGE TIME SLOT (QUICK SLOT / BLOCK TIME / WEEKLY SERIES) */}
       {slotModalOpen && (
-        <div className="admin-modal-backdrop">
+        <div
+          className="admin-modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeSlotModal();
+          }}
+        >
           <div className="admin-modal-card" style={{ padding: '1.75rem', maxWidth: '560px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
             
             {/* Header */}
@@ -968,8 +1021,10 @@ export default function CalendarPage() {
                 </span>
               </div>
               <button
-                onClick={() => setSlotModalOpen(false)}
+                type="button"
+                onClick={closeSlotModal}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--mut)', padding: '4px' }}
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -977,106 +1032,327 @@ export default function CalendarPage() {
 
             {/* Selected Slot Time Banner */}
             {selectedSlotDisplay && (
-              <div className="slot-action-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <CalendarIcon className="w-4 h-4 text-acc" />
+              <div className="slot-action-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    background: 'var(--accbg)',
+                    color: 'var(--acc)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <CalendarIcon className="w-4 h-4 text-acc" />
+                  </div>
                   <div>
                     <strong style={{ display: 'block', fontSize: '13px', color: 'var(--ink)' }}>
-                      {selectedSlotDisplay.dateLabel}
+                      {selectedSlotDisplay.dateLabel} · {selectedSlotDisplay.timeLabel}
                     </strong>
-                    <span style={{ fontSize: '12px', color: 'var(--mut)' }}>
-                      {selectedSlotDisplay.timeLabel}
-                    </span>
+                    {selectedSlotDisplay.ethiopianLabel && (
+                      <span style={{ fontSize: '11px', color: 'var(--mut)', display: 'block', marginTop: '1px' }}>
+                        🇪🇹 {selectedSlotDisplay.ethiopianLabel}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span style={{
-                  fontSize: '11px',
+                  fontSize: '11.5px',
                   fontWeight: 700,
-                  padding: '4px 8px',
+                  padding: '4px 10px',
                   borderRadius: '6px',
                   background: 'var(--card)',
                   color: 'var(--acc)',
-                  border: '1px solid rgba(36, 87, 74, 0.2)'
+                  border: '1px solid rgba(36, 87, 74, 0.25)',
+                  flexShrink: 0
                 }}>
                   {selectedSlotDisplay.durationLabel}
                 </span>
               </div>
             )}
 
-            {/* 3 Main Action Mode Tabs */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem' }}>
-              <button
-                type="button"
-                onClick={() => setSlotModalTab('quick_slot')}
-                style={{
-                  flex: 1,
-                  padding: '10px 8px',
-                  borderRadius: '8px',
-                  border: '1.5px solid',
-                  borderColor: slotModalTab === 'quick_slot' ? 'var(--acc)' : 'var(--line)',
-                  background: slotModalTab === 'quick_slot' ? 'var(--accbg)' : 'var(--card)',
-                  color: slotModalTab === 'quick_slot' ? 'var(--acct)' : 'var(--mut)',
-                  fontWeight: 700,
-                  fontSize: '12.5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <UserPlus className="w-4 h-4" /> Quick Slot
-              </button>
+            {/* 3 Main Action Mode: Choice List vs Form Tabs */}
+            {slotModalTab === 'choose' ? (
+              <div style={{ marginTop: '0.5rem' }}>
+                <p style={{ margin: '0 0 1rem', fontSize: '13px', color: 'var(--mut)', fontWeight: 500 }}>
+                  Choose an action for this selected time window:
+                </p>
 
-              <button
-                type="button"
-                onClick={() => setSlotModalTab('block_time')}
-                style={{
-                  flex: 1,
-                  padding: '10px 8px',
-                  borderRadius: '8px',
-                  border: '1.5px solid',
-                  borderColor: slotModalTab === 'block_time' ? '#ef4444' : 'var(--line)',
-                  background: slotModalTab === 'block_time' ? 'rgba(239, 68, 68, 0.08)' : 'var(--card)',
-                  color: slotModalTab === 'block_time' ? '#b91c1c' : 'var(--mut)',
-                  fontWeight: 700,
-                  fontSize: '12.5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Ban className="w-4 h-4" /> Block Out Time
-              </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* OPTION 1: QUICK SLOT */}
+                  <div
+                    onClick={() => setSlotModalTab('quick_slot')}
+                    className="slot-choice-card"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '14px 16px',
+                      borderRadius: '12px',
+                      border: '1.5px solid var(--line)',
+                      background: 'var(--card-elevated)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div
+                        style={{
+                          width: '42px',
+                          height: '42px',
+                          borderRadius: '10px',
+                          background: 'var(--accbg)',
+                          color: 'var(--acct)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Plus className="w-5 h-5 text-acc" />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <strong style={{ fontSize: '14px', color: 'var(--ink)' }}>
+                            Quick Slot
+                          </strong>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'var(--accbg)',
+                            color: 'var(--acct)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em'
+                          }}>
+                            Single Session
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '12px', color: 'var(--mut)', display: 'block', marginTop: '2px' }}>
+                          Book a single therapy session for an existing or new patient
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5" style={{ color: 'var(--acc)', flexShrink: 0 }} />
+                  </div>
 
-              <button
-                type="button"
-                onClick={() => setSlotModalTab('weekly_series')}
-                style={{
-                  flex: 1,
-                  padding: '10px 8px',
-                  borderRadius: '8px',
-                  border: '1.5px solid',
-                  borderColor: slotModalTab === 'weekly_series' ? 'var(--acc)' : 'var(--line)',
-                  background: slotModalTab === 'weekly_series' ? 'var(--accbg)' : 'var(--card)',
-                  color: slotModalTab === 'weekly_series' ? 'var(--acct)' : 'var(--mut)',
-                  fontWeight: 700,
-                  fontSize: '12.5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Repeat className="w-4 h-4" /> Weekly Series
-              </button>
-            </div>
+                  {/* OPTION 2: WEEKLY SERIES */}
+                  <div
+                    onClick={() => setSlotModalTab('weekly_series')}
+                    className="slot-choice-card"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '14px 16px',
+                      borderRadius: '12px',
+                      border: '1.5px solid var(--line)',
+                      background: 'var(--card-elevated)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div
+                        style={{
+                          width: '42px',
+                          height: '42px',
+                          borderRadius: '10px',
+                          background: 'rgba(37, 99, 235, 0.1)',
+                          color: '#2563eb',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Repeat className="w-5 h-5 text-acc" />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <strong style={{ fontSize: '14px', color: 'var(--ink)' }}>
+                            Weekly Series
+                          </strong>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'rgba(37, 99, 235, 0.1)',
+                            color: '#2563eb',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em'
+                          }}>
+                            Recurring
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '12px', color: 'var(--mut)', display: 'block', marginTop: '2px' }}>
+                          Establish a regular recurring slot repeating every week on this day
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5" style={{ color: '#2563eb', flexShrink: 0 }} />
+                  </div>
+
+                  {/* OPTION 3: BLOCK OUT TIME */}
+                  <div
+                    onClick={() => setSlotModalTab('block_time')}
+                    className="slot-choice-card"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '14px 16px',
+                      borderRadius: '12px',
+                      border: '1.5px solid var(--line)',
+                      background: 'var(--card-elevated)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div
+                        style={{
+                          width: '42px',
+                          height: '42px',
+                          borderRadius: '10px',
+                          background: 'rgba(220, 38, 38, 0.1)',
+                          color: '#dc2626',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Ban className="w-5 h-5" style={{ color: '#dc2626' }} />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <strong style={{ fontSize: '14px', color: 'var(--ink)' }}>
+                            Block Time
+                          </strong>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'rgba(220, 38, 38, 0.1)',
+                            color: '#dc2626',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em'
+                          }}>
+                            Unavailable
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '12px', color: 'var(--mut)', display: 'block', marginTop: '2px' }}>
+                          Mark this time as unavailable (Lunch Break, Personal Off, or Admin Work)
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5" style={{ color: '#dc2626', flexShrink: 0 }} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {/* 3 Main Action Mode Tabs with Back Button */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.25rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSlotModalTab('choose')}
+                    style={{
+                      background: 'var(--card)',
+                      border: '1px solid var(--line)',
+                      color: 'var(--mut)',
+                      borderRadius: '8px',
+                      padding: '8px 10px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                    title="Return to options list"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '6px', flex: 1 }}>
+                    <button
+                      type="button"
+                      onClick={() => setSlotModalTab('quick_slot')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 6px',
+                        borderRadius: '8px',
+                        border: '1.5px solid',
+                        borderColor: slotModalTab === 'quick_slot' ? 'var(--acc)' : 'var(--line)',
+                        background: slotModalTab === 'quick_slot' ? 'var(--accbg)' : 'var(--card)',
+                        color: slotModalTab === 'quick_slot' ? 'var(--acct)' : 'var(--mut)',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> Quick Slot
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSlotModalTab('weekly_series')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 6px',
+                        borderRadius: '8px',
+                        border: '1.5px solid',
+                        borderColor: slotModalTab === 'weekly_series' ? 'var(--acc)' : 'var(--line)',
+                        background: slotModalTab === 'weekly_series' ? 'var(--accbg)' : 'var(--card)',
+                        color: slotModalTab === 'weekly_series' ? 'var(--acct)' : 'var(--mut)',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <Repeat className="w-3.5 h-3.5" /> Weekly Series
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSlotModalTab('block_time')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 6px',
+                        borderRadius: '8px',
+                        border: '1.5px solid',
+                        borderColor: slotModalTab === 'block_time' ? '#ef4444' : 'var(--line)',
+                        background: slotModalTab === 'block_time' ? 'rgba(239, 68, 68, 0.08)' : 'var(--card)',
+                        color: slotModalTab === 'block_time' ? '#b91c1c' : 'var(--mut)',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <Ban className="w-3.5 h-3.5" /> Block Time
+                    </button>
+                  </div>
+                </div>
 
             {/* TAB 1: QUICK SLOT (PATIENT) */}
             {slotModalTab === 'quick_slot' && (
@@ -1169,7 +1445,7 @@ export default function CalendarPage() {
                     </div>
                     <div style={{ gridColumn: 'span 2', padding: '8px 10px', background: 'var(--line-subtle)', borderRadius: '6px', fontSize: '12px', color: 'var(--mut)' }}>
                       Need complete clinical onboarding with private reschedule tokens & medical intake?{' '}
-                      <Link to="/intake" onClick={() => setSlotModalOpen(false)} style={{ color: 'var(--acc)', fontWeight: 600, textDecoration: 'none' }}>
+                      <Link to="/intake" onClick={closeSlotModal} style={{ color: 'var(--acc)', fontWeight: 600, textDecoration: 'none' }}>
                         Open Full Patient Intake →
                       </Link>
                     </div>
@@ -1194,8 +1470,13 @@ export default function CalendarPage() {
                       onChange={e => setBookingDuration(Number(e.target.value))}
                       className="admin-select"
                     >
+                      {![30, 45, 60, 75, 90, 120].includes(bookingDuration) && (
+                        <option value={bookingDuration}>{bookingDuration} Min (Custom)</option>
+                      )}
                       <option value={30}>30 Min</option>
+                      <option value={45}>45 Min</option>
                       <option value={60}>60 Min (1 hr)</option>
+                      <option value={75}>75 Min (1 hr 15m)</option>
                       <option value={90}>90 Min (1.5 hr)</option>
                       <option value={120}>120 Min (2 hr)</option>
                     </select>
@@ -1220,7 +1501,7 @@ export default function CalendarPage() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                   <button
                     type="button"
-                    onClick={() => setSlotModalOpen(false)}
+                    onClick={closeSlotModal}
                     className="btn-admin-secondary"
                   >
                     Cancel
@@ -1298,7 +1579,7 @@ export default function CalendarPage() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                   <button
                     type="button"
-                    onClick={() => setSlotModalOpen(false)}
+                    onClick={closeSlotModal}
                     className="btn-admin-secondary"
                   >
                     Cancel
@@ -1387,9 +1668,15 @@ export default function CalendarPage() {
                       onChange={e => setSeriesDuration(Number(e.target.value))}
                       className="admin-select"
                     >
+                      {![30, 45, 60, 75, 90, 120].includes(seriesDuration) && (
+                        <option value={seriesDuration}>{seriesDuration} Min (Custom)</option>
+                      )}
                       <option value={30}>30 Min</option>
+                      <option value={45}>45 Min</option>
                       <option value={60}>60 Min (1 hr)</option>
+                      <option value={75}>75 Min (1 hr 15m)</option>
                       <option value={90}>90 Min (1.5 hr)</option>
+                      <option value={120}>120 Min (2 hr)</option>
                     </select>
                   </div>
                 </div>
@@ -1397,7 +1684,7 @@ export default function CalendarPage() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                   <button
                     type="button"
-                    onClick={() => setSlotModalOpen(false)}
+                    onClick={closeSlotModal}
                     className="btn-admin-secondary"
                   >
                     Cancel
@@ -1413,6 +1700,8 @@ export default function CalendarPage() {
                   </button>
                 </div>
               </form>
+            )}
+              </div>
             )}
 
           </div>

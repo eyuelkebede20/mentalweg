@@ -46,8 +46,11 @@ fs.cpSync(path.join(verifierDir, 'dist'), path.join(stageDir, 'dist'), { recursi
 const indexPath = path.join(stageDir, 'dist', 'index.js');
 let indexContent = fs.readFileSync(indexPath, 'utf8');
 const bootstrapHeader = `"use strict";
-// LiteSpeed / CloudLinux node_modules path resolver
+// LiteSpeed / CloudLinux node_modules path resolver & memory tuning
 try {
+    process.env.PRISMA_TELEMETRY = '0';
+    process.env.CHECKPOINT_DISABLE = '1';
+    process.env.NODE_OPTIONS = ((process.env.NODE_OPTIONS || '') + ' --disable-wasm-trap-handler').trim();
     const _path = require('path');
     const _rootModules = _path.resolve(__dirname, '..', 'node_modules');
     const _distModules = _path.resolve(__dirname, 'node_modules');
@@ -78,7 +81,7 @@ const prodPkg = {
   version: verifierPkg.version || '3.0.3',
   main: 'dist/index.js',
   scripts: {
-    start: 'node dist/index.js'
+    start: 'node --disable-wasm-trap-handler dist/index.js'
   },
   dependencies: { ...verifierPkg.dependencies }
 };
