@@ -6,6 +6,8 @@ verifier-api/node_modules/
 
 # Production builds
 dist/
+dist-cpanel/
+*.zip
 admin/dist/
 public-app/dist/
 verifier-api/dist/

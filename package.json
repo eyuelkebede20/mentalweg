@@ -8,7 +8,9 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "build": "npm run build --prefix public-app && npm run build --prefix admin && node scripts/build-vercel.mjs",
+    "build:server": "tsc",
     "build:vercel": "npm run build",
+    "pack:cpanel": "node scripts/pack-cpanel.mjs",
     "test": "vitest run"
   },
   "workspaces": [

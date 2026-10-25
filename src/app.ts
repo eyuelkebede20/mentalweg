@@ -6,6 +6,7 @@ import { env } from './env';
 import { authRoutes } from './routes/auth';
 import { adminRoutes } from './routes/admin';
 import { publicRoutes } from './routes/public';
+import { patientRoutes } from './routes/patient';
 import { getAppVersionInfo } from './utils/version';
 import { getUploadsDir } from './utils/paths';
 
@@ -26,6 +27,7 @@ export async function buildApp() {
   app.register(authRoutes);
   app.register(adminRoutes);
   app.register(publicRoutes);
+  app.register(patientRoutes);
 
   // Version metadata route
   app.get('/api/version', async () => {
@@ -61,8 +63,14 @@ export async function buildApp() {
   });
 
   // 1. Serve admin app (Must register /admin/ before root / to prevent prefix shadowing)
-  const adminDist = path.join(__dirname, '../admin/dist');
-  if (fs.existsSync(adminDist)) {
+  const adminDistCandidates = [
+    path.join(__dirname, '../admin/dist'),
+    path.join(__dirname, 'admin'),
+    path.join(__dirname, 'client/admin'),
+    path.join(process.cwd(), 'admin/dist'),
+  ];
+  const adminDist = adminDistCandidates.find(p => fs.existsSync(p));
+  if (adminDist) {
     app.register(require('@fastify/static'), {
       root: adminDist,
       prefix: '/admin/',
@@ -86,8 +94,14 @@ export async function buildApp() {
   });
 
   // 3. Serve public app at root /
-  const publicDist = path.join(__dirname, '../public-app/dist');
-  if (fs.existsSync(publicDist)) {
+  const publicDistCandidates = [
+    path.join(__dirname, '../public-app/dist'),
+    path.join(__dirname, 'public'),
+    path.join(__dirname, 'client'),
+    path.join(process.cwd(), 'public-app/dist'),
+  ];
+  const publicDist = publicDistCandidates.find(p => fs.existsSync(p));
+  if (publicDist) {
     app.register(require('@fastify/static'), {
       root: publicDist,
       prefix: '/',
@@ -105,8 +119,14 @@ export async function buildApp() {
     }
 
     if (url.startsWith('/admin')) {
-      const adminIndex = path.join(__dirname, '../admin/dist/index.html');
-      if (fs.existsSync(adminIndex)) {
+      const adminIndexCandidates = [
+        path.join(__dirname, '../admin/dist/index.html'),
+        path.join(__dirname, 'admin/index.html'),
+        path.join(__dirname, 'client/admin/index.html'),
+        path.join(process.cwd(), 'admin/dist/index.html'),
+      ];
+      const adminIndex = adminIndexCandidates.find(p => fs.existsSync(p));
+      if (adminIndex && fs.existsSync(adminIndex)) {
         reply.type('text/html');
         return fs.createReadStream(adminIndex);
       }
@@ -116,8 +136,14 @@ export async function buildApp() {
     }
 
     if (!url.startsWith('/api') && !url.startsWith('/auth') && !url.startsWith('/uploads')) {
-      const publicIndex = path.join(__dirname, '../public-app/dist/index.html');
-      if (fs.existsSync(publicIndex)) {
+      const publicIndexCandidates = [
+        path.join(__dirname, '../public-app/dist/index.html'),
+        path.join(__dirname, 'public/index.html'),
+        path.join(__dirname, 'client/index.html'),
+        path.join(process.cwd(), 'public-app/dist/index.html'),
+      ];
+      const publicIndex = publicIndexCandidates.find(p => fs.existsSync(p));
+      if (publicIndex && fs.existsSync(publicIndex)) {
         reply.type('text/html');
         return fs.createReadStream(publicIndex);
       }

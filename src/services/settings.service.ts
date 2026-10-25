@@ -42,6 +42,10 @@ export const SettingsSchema = z.object({
   bookingHorizonDays: z.number().default(30),
   minimumNoticeMin: z.number().default(0),
   holdDurationMin: z.number().default(20),
+  rescheduleLeadTimeDays: z.number().int().min(0).default(7),
+  rescheduleWindowWeeks: z.number().int().min(1).default(4),
+  allowClientCancellation: z.boolean().default(false),
+  cancellationPolicyText: z.string().default('Appointments cannot be rescheduled or cancelled within 7 days of the scheduled time. For urgent adjustments, please contact the practice directly.'),
   consentText: z.string().default('I confirm that I am booking an in-person session in Addis Ababa and agree to arrive on time.'),
   consentVersion: z.string().default('1.0'),
   workingHours: z.record(z.string(), z.array(z.object({

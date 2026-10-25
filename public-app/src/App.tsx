@@ -5,6 +5,9 @@ import CalendarTimelinePicker from './components/CalendarTimelinePicker';
 import BookingPaymentForm from './components/BookingPaymentForm';
 import BookingConfirmation from './components/BookingConfirmation';
 import TimeConventionModal from './components/TimeConventionModal';
+import ClientPortal from './components/ClientPortal';
+import PatientAuthPage from './components/PatientAuthPage';
+import PatientDashboard from './components/PatientDashboard';
 import { type TimeConvention, getStoredTimeConvention, setStoredTimeConvention } from './utils/ethiopianTime';
 import { Clock, Globe, ArrowLeft, Check, Moon, Sun } from 'lucide-react';
 import './LandingPage.css';
@@ -68,6 +71,57 @@ export default function App() {
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
   const [bookingResult, setBookingResult] = useState<any | null>(null);
 
+  // Check if viewing a verified client portal link: /m/:token or ?m=:token
+  const getVerifiedToken = () => {
+    if (typeof window === 'undefined') return null;
+    const match = window.location.pathname.match(/^\/m\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) return match[1];
+    const q = new URLSearchParams(window.location.search).get('m');
+    return q || null;
+  };
+
+  const [verifiedToken, setVerifiedToken] = useState<string | null>(getVerifiedToken);
+
+  // Hidden Patient Portal detection: /patient, /patient/login, /patient/signup, /patient/reset, /portal
+  const isPatientPath = typeof window !== 'undefined' && (
+    window.location.pathname.startsWith('/patient') || window.location.pathname.startsWith('/portal')
+  );
+
+  const [patientView, setPatientView] = useState<boolean>(isPatientPath);
+  const [patientUser, setPatientUser] = useState<any | null>(null);
+  const [checkingPatientAuth, setCheckingPatientAuth] = useState<boolean>(isPatientPath);
+
+  useEffect(() => {
+    if (patientView) {
+      setCheckingPatientAuth(true);
+      fetch('/api/patient/me')
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.authenticated && data.client) {
+            setPatientUser(data.client);
+          } else {
+            setPatientUser(null);
+          }
+        })
+        .catch(() => setPatientUser(null))
+        .finally(() => setCheckingPatientAuth(false));
+    }
+  }, [patientView]);
+
+  const getPatientMode = (): 'login' | 'signup' | 'forgot' | 'reset' => {
+    if (typeof window === 'undefined') return 'login';
+    const path = window.location.pathname;
+    if (path.includes('/signup')) return 'signup';
+    if (path.includes('/forgot')) return 'forgot';
+    if (path.includes('/reset')) return 'reset';
+    return 'login';
+  };
+
+  const getResetTokenFromUrl = (): string => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('token') || '';
+  };
+
   // Load practice config from API
   useEffect(() => {
     fetch('/api/public/config')
@@ -104,6 +158,79 @@ export default function App() {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--sand-50, #fbfaf8)', color: 'var(--forest-900, #14241e)', fontFamily: 'sans-serif' }}>
         <p style={{ fontSize: '1.05rem', fontWeight: 600 }}>Opening Mental Weg Clinical Admin...</p>
+      </div>
+    );
+  }
+
+  // Render Verified Client Portal if accessed via private token link
+  if (verifiedToken) {
+    return (
+      <div className="app-shell" data-theme={theme}>
+        <ClientPortal
+          token={verifiedToken}
+          timeConvention={timeConvention}
+          onToggleConvention={() => {
+            const next = timeConvention === 'ethiopian' ? 'gregorian' : 'ethiopian';
+            setTimeConvention(next);
+            setStoredTimeConvention(next);
+          }}
+          onBackToHome={() => {
+            if (typeof window !== 'undefined') {
+              window.history.pushState({}, '', '/');
+            }
+            setVerifiedToken(null);
+            setStep(0);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Render Hidden Patient Portal: Login / Signup / Dashboard
+  if (patientView) {
+    if (checkingPatientAuth) {
+      return (
+        <div className="app-shell" data-theme={theme} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <p style={{ color: 'var(--mut)', fontSize: '14px' }}>Connecting to Patient Sanctuary...</p>
+        </div>
+      );
+    }
+
+    if (patientUser) {
+      return (
+        <div className="app-shell" data-theme={theme}>
+          <PatientDashboard
+            timeConvention={timeConvention}
+            onToggleConvention={() => {
+              const next = timeConvention === 'ethiopian' ? 'gregorian' : 'ethiopian';
+              setTimeConvention(next);
+              setStoredTimeConvention(next);
+            }}
+            onLogout={() => {
+              setPatientUser(null);
+              setPatientView(false);
+              if (typeof window !== 'undefined') {
+                window.history.pushState({}, '', '/');
+              }
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="app-shell" data-theme={theme}>
+        <PatientAuthPage
+          initialMode={getPatientMode()}
+          resetToken={getResetTokenFromUrl()}
+          onSuccessLogin={(client) => setPatientUser(client)}
+          onBackToSanctuary={() => {
+            setPatientView(false);
+            if (typeof window !== 'undefined') {
+              window.history.pushState({}, '', '/');
+            }
+          }}
+        />
       </div>
     );
   }

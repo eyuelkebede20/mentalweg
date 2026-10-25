@@ -42,4 +42,11 @@ sqlite.exec(`
   );
 `);
 
+// Safe incremental columns for clients table (patient authentication & approval)
+try { sqlite.exec("ALTER TABLE clients ADD COLUMN password_hash TEXT;"); } catch {}
+try { sqlite.exec("ALTER TABLE clients ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'approved';"); } catch {}
+try { sqlite.exec("ALTER TABLE clients ADD COLUMN google_id TEXT;"); } catch {}
+try { sqlite.exec("ALTER TABLE clients ADD COLUMN reset_token TEXT;"); } catch {}
+try { sqlite.exec("ALTER TABLE clients ADD COLUMN reset_token_expires_at INTEGER;"); } catch {}
+
 export const db = drizzle(sqlite, { schema });

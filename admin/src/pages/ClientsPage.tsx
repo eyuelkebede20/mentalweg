@@ -25,6 +25,7 @@ interface Client {
   phoneE164: string;
   email?: string;
   isVerified: boolean;
+  approvalStatus?: string;
   bookingToken?: string;
   note?: string;
   totalSessions: number;
@@ -131,6 +132,20 @@ export default function ClientsPage() {
           setSelectedClient({ ...selectedClient, isVerified: !current, bookingToken: updated.bookingToken });
         }
         showToast(`Client ${!current ? 'marked as verified' : 'unverified'}.`);
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const approvePatient = async (id: number) => {
+    try {
+      const res = await fetch(`/api/admin/patients/${id}/approve`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Patient account approved & welcome email sent!');
+        loadClients();
+      } else {
+        showToast('Failed to approve patient', 'error');
       }
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -410,7 +425,11 @@ export default function ClientsPage() {
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    {c.isVerified ? (
+                    {c.approvalStatus === 'pending' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#b45309', background: '#fffbeb', border: '1px solid #fed7aa', padding: '3px 10px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700 }}>
+                        Pending Approval
+                      </span>
+                    ) : c.isVerified ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#165b38', background: '#e3f7ed', padding: '3px 10px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600 }}>
                         <ShieldCheck className="w-3.5 h-3.5" /> Verified
                       </span>
@@ -422,6 +441,23 @@ export default function ClientsPage() {
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                      {c.approvalStatus === 'pending' && (
+                        <button
+                          onClick={() => approvePatient(c.id)}
+                          style={{
+                            background: '#165b38',
+                            color: '#fff',
+                            border: 'none',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          Approve
+                        </button>
+                      )}
                       <button
                         onClick={() => openClientDetail(c)}
                         style={{

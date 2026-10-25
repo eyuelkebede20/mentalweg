@@ -12,7 +12,8 @@ import {
   Calendar as CalendarIcon,
   Flag,
   Palette,
-  GitCommit
+  GitCommit,
+  Lock
 } from 'lucide-react';
 import VersionBadge from '../components/VersionBadge';
 import { useTheme } from '../context/ThemeContext';
@@ -52,7 +53,7 @@ function getLuminance(hex: string): number {
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'shift' | 'posters' | 'payments' | 'holidays' | 'system'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'shift' | 'policies' | 'posters' | 'payments' | 'holidays' | 'system'>('profile');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -83,6 +84,12 @@ export default function SettingsPage() {
     '5': [{ start: '09:00', end: '16:00' }],
     '6': [{ start: '09:00', end: '13:00' }],
   });
+
+  // Cancellation & Reschedule Policies
+  const [rescheduleLeadTimeDays, setRescheduleLeadTimeDays] = useState(7);
+  const [rescheduleWindowWeeks, setRescheduleWindowWeeks] = useState(4);
+  const [allowClientCancellation, setAllowClientCancellation] = useState(false);
+  const [cancellationPolicyText, setCancellationPolicyText] = useState("Appointments cannot be rescheduled or cancelled within 7 days of the scheduled time. For urgent adjustments, please contact the practice directly.");
 
   // Training Posters
   const [posters, setPosters] = useState<TrainingPoster[]>([]);
@@ -136,6 +143,10 @@ export default function SettingsPage() {
           if (data.schedulingFeePercent) setSchedulingFeePercent(data.schedulingFeePercent);
           if (data.bufferMin) setBufferMin(data.bufferMin);
           if (data.holdDurationMin) setHoldDurationMin(data.holdDurationMin);
+          if (data.rescheduleLeadTimeDays !== undefined) setRescheduleLeadTimeDays(data.rescheduleLeadTimeDays);
+          if (data.rescheduleWindowWeeks !== undefined) setRescheduleWindowWeeks(data.rescheduleWindowWeeks);
+          if (data.allowClientCancellation !== undefined) setAllowClientCancellation(data.allowClientCancellation);
+          if (data.cancellationPolicyText) setCancellationPolicyText(data.cancellationPolicyText);
           if (data.workingHours) setWorkingHours(data.workingHours);
           if (data.trainingPosters) setPosters(data.trainingPosters);
           if (data.paymentAccounts) setAccounts(data.paymentAccounts);
@@ -172,6 +183,10 @@ export default function SettingsPage() {
         schedulingFeePercent,
         bufferMin,
         holdDurationMin,
+        rescheduleLeadTimeDays,
+        rescheduleWindowWeeks,
+        allowClientCancellation,
+        cancellationPolicyText,
         workingHours,
         trainingPosters: posters,
         paymentAccounts: accounts,
@@ -374,6 +389,24 @@ export default function SettingsPage() {
           }}
         >
           <Clock className="w-4 h-4" /> Shift Times & Hours
+        </button>
+
+        <button
+          onClick={() => setActiveTab('policies')}
+          style={{
+            background: activeTab === 'policies' ? 'var(--acc)' : 'var(--card)',
+            color: activeTab === 'policies' ? '#fff' : 'var(--ink)',
+            border: '1px solid var(--line)',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            cursor: 'pointer',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <Lock className="w-4 h-4" /> Reschedule & Cancellation Rules
         </button>
 
         <button
@@ -773,6 +806,172 @@ export default function SettingsPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: CANCELLATION & RESCHEDULE POLICIES */}
+      {activeTab === 'policies' && (
+        <div style={{ background: 'var(--card)', border: '1px solid var(--line)', padding: '1.75rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h2 style={{ fontSize: '18px', margin: '0 0 6px', color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Lock className="w-5 h-5 text-acc" /> Cancellation & Rescheduling Governance
+            </h2>
+            <p style={{ margin: 0, color: 'var(--mut)', fontSize: '14px', lineHeight: 1.5 }}>
+              Define when client self-service rescheduling and cancellations become inactive. As the therapist/admin, you can always manually move or cancel any appointment directly from your Calendar at any time.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '1.5rem' }}>
+            {/* Cutoff Lead Time */}
+            <div style={{ background: 'var(--off)', padding: '1.25rem', borderRadius: '10px', border: '1px solid var(--line)' }}>
+              <label className="admin-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: 700 }}>
+                <Lock className="w-4 h-4 text-acc" /> Cutoff Lead Time (Lock Threshold)
+              </label>
+              <p style={{ fontSize: '12px', color: 'var(--mut)', margin: '4px 0 12px' }}>
+                Appointments within this window cannot be rescheduled or cancelled online by clients. The action becomes inactive.
+              </p>
+              
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                {[
+                  { days: 3, label: '3 Days (72h)' },
+                  { days: 7, label: '7 Days (1 Wk)' },
+                  { days: 14, label: '14 Days (2 Wks)' }
+                ].map(preset => (
+                  <button
+                    key={preset.days}
+                    type="button"
+                    onClick={() => setRescheduleLeadTimeDays(preset.days)}
+                    style={{
+                      background: rescheduleLeadTimeDays === preset.days ? 'var(--acc)' : 'var(--card)',
+                      color: rescheduleLeadTimeDays === preset.days ? '#fff' : 'var(--ink)',
+                      border: '1px solid var(--line)',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={rescheduleLeadTimeDays}
+                  onChange={e => setRescheduleLeadTimeDays(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="admin-input"
+                  style={{ width: '90px', fontWeight: 700 }}
+                />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>Days before appointment</span>
+              </div>
+            </div>
+
+            {/* Reschedule Horizon Window */}
+            <div style={{ background: 'var(--off)', padding: '1.25rem', borderRadius: '10px', border: '1px solid var(--line)' }}>
+              <label className="admin-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: 700 }}>
+                <CalendarIcon className="w-4 h-4 text-acc" /> Maximum Reschedule Forward Window
+              </label>
+              <p style={{ fontSize: '12px', color: 'var(--mut)', margin: '4px 0 12px' }}>
+                How far into the future a verified client can move their session.
+              </p>
+
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                {[
+                  { weeks: 2, label: '2 Weeks' },
+                  { weeks: 4, label: '4 Weeks' },
+                  { weeks: 8, label: '8 Weeks' }
+                ].map(preset => (
+                  <button
+                    key={preset.weeks}
+                    type="button"
+                    onClick={() => setRescheduleWindowWeeks(preset.weeks)}
+                    style={{
+                      background: rescheduleWindowWeeks === preset.weeks ? 'var(--acc)' : 'var(--card)',
+                      color: rescheduleWindowWeeks === preset.weeks ? '#fff' : 'var(--ink)',
+                      border: '1px solid var(--line)',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={rescheduleWindowWeeks}
+                  onChange={e => setRescheduleWindowWeeks(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="admin-input"
+                  style={{ width: '90px', fontWeight: 700 }}
+                />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>Weeks into the future</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Cancellation Permission Toggle */}
+          <div style={{ background: 'var(--off)', padding: '1.25rem', borderRadius: '10px', border: '1px solid var(--line)', marginBottom: '1.5rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', margin: 0 }}>
+              <input
+                type="checkbox"
+                checked={allowClientCancellation}
+                onChange={e => setAllowClientCancellation(e.target.checked)}
+                style={{ width: '18px', height: '18px', accentColor: 'var(--acc)' }}
+              />
+              <div>
+                <strong style={{ fontSize: '14px', color: 'var(--ink)' }}>
+                  Allow Verified Clients to Directly Cancel Online (Outside Cutoff)
+                </strong>
+                <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--mut)' }}>
+                  Default is disabled: clients can only reschedule or must contact you directly to cancel. This prevents sudden empty slots.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* Policy Text & Client Banner Preview */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label className="admin-label">
+              Policy Message Displayed to Clients (Shown when within cutoff or upon lock)
+            </label>
+            <textarea
+              rows={2}
+              value={cancellationPolicyText}
+              onChange={e => setCancellationPolicyText(e.target.value)}
+              className="admin-textarea"
+              style={{ minHeight: '70px', marginBottom: '12px' }}
+            />
+
+            {/* Live Client Portal Preview */}
+            <div style={{ border: '1px dashed var(--line)', borderRadius: '10px', padding: '14px', background: 'var(--card)' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--mut)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>
+                Client Portal Preview (When inside {rescheduleLeadTimeDays}-day lock threshold)
+              </span>
+              <div style={{ background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: '8px', padding: '12px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <Lock className="w-5 h-5" style={{ color: '#c53030', flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong style={{ fontSize: '13px', color: '#9b2c2c', display: 'block' }}>
+                    Rescheduling & Cancellation Inactive
+                  </strong>
+                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#742a2a', lineHeight: 1.4 }}>
+                    {cancellationPolicyText || `Appointments cannot be rescheduled or cancelled within ${rescheduleLeadTimeDays} days of the scheduled time. Please contact the practice directly.`}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -55,6 +55,11 @@ export const clientsTable = sqliteTable('clients', {
   guardianName: text('guardian_name'),
   note: text('note'),
   bookingToken: text('booking_token').unique(),
+  passwordHash: text('password_hash'),
+  approvalStatus: text('approval_status').notNull().default('approved'), // 'pending', 'approved', 'rejected'
+  googleId: text('google_id'),
+  resetToken: text('reset_token'),
+  resetTokenExpiresAt: integer('reset_token_expires_at', { mode: 'timestamp' }),
   deletedAt: integer('deleted_at', { mode: 'timestamp' }),
   ...timestamps,
 });

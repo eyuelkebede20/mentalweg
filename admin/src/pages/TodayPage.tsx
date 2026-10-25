@@ -75,11 +75,21 @@ interface RecentChange {
   clientPhone: string;
 }
 
+interface PendingPatientApproval {
+  id: number;
+  publicId: string;
+  displayName: string;
+  email?: string;
+  phoneE164: string;
+  createdAt: string;
+}
+
 interface TodayData {
   dateEAT: string;
   sessions: TodaySession[];
   pendingPayments: PendingPayment[];
   unappliedPayments: UnappliedPayment[];
+  pendingPatientApprovals?: PendingPatientApproval[];
   recentChanges: RecentChange[];
   stats: {
     totalToday: number;
@@ -168,6 +178,43 @@ export default function TodayPage() {
     }
   };
 
+  // 3. Patient Registration Approval
+  const handleApprovePatient = async (id: number) => {
+    setActionLoading(id);
+    try {
+      const res = await fetch(`/api/admin/patients/${id}/approve`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Patient account approved and welcome email dispatched!');
+        fetchTodayData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Failed to approve patient', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRejectPatient = async (id: number) => {
+    if (!confirm('Are you sure you want to decline this patient registration?')) return;
+    setActionLoading(id);
+    try {
+      const res = await fetch(`/api/admin/patients/${id}/reject`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Patient registration declined.');
+        fetchTodayData();
+      } else {
+        showToast('Failed to decline registration', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   // 3. Send Email reminder
   const handleSendEmailReminder = async (sessionId: number) => {
     setActionLoading(sessionId);
@@ -232,7 +279,7 @@ export default function TodayPage() {
     timeZone: 'Africa/Addis_Ababa',
   });
 
-  const needsAttentionCount = (data?.pendingPayments.length || 0) + (data?.unappliedPayments.length || 0);
+  const needsAttentionCount = (data?.pendingPayments.length || 0) + (data?.unappliedPayments.length || 0) + (data?.pendingPatientApprovals?.length || 0);
 
   return (
     <div style={{ padding: '1.25rem', maxWidth: '1000px', margin: '0 auto' }}>
@@ -345,6 +392,84 @@ export default function TodayPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* 0. Pending Patient Account Approvals */}
+            {data?.pendingPatientApprovals?.map(patient => (
+              <div
+                key={`patient-${patient.id}`}
+                style={{
+                  background: 'var(--card)',
+                  border: '1px solid #fed7aa',
+                  borderRadius: '10px',
+                  padding: '1rem',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ background: '#fffbeb', color: '#b45309', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>
+                      Patient Approval Required
+                    </span>
+                    <strong style={{ fontSize: '15px' }}>{patient.displayName}</strong>
+                    <span style={{ fontSize: '12px', color: 'var(--acc)', fontFamily: 'monospace', fontWeight: 600 }}>
+                      {patient.publicId}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '13px', color: 'var(--ink)', marginTop: '4px' }}>
+                    Phone: <strong style={{ fontFamily: 'monospace' }}>{patient.phoneE164}</strong>
+                    {patient.email && <span> · Email: <strong>{patient.email}</strong></span>}
+                  </div>
+                  <span style={{ fontSize: '11px', color: 'var(--mut)', marginTop: '2px', display: 'block' }}>
+                    Registered: {new Date(patient.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={() => handleRejectPatient(patient.id)}
+                    disabled={actionLoading === patient.id}
+                    style={{
+                      background: 'var(--off)',
+                      border: '1px solid var(--line)',
+                      color: 'var(--mut)',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Decline
+                  </button>
+
+                  <button
+                    onClick={() => handleApprovePatient(patient.id)}
+                    disabled={actionLoading === patient.id}
+                    style={{
+                      background: 'var(--acc)',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {actionLoading === patient.id ? 'Approving...' : 'Approve Patient'}
+                  </button>
+                </div>
+              </div>
+            ))}
+
             {/* 1. Pending Payments */}
             {data?.pendingPayments.map(p => (
               <div

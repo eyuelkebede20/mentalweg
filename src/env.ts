@@ -4,7 +4,16 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const envSchema = z.object({
-  BASE_URL: z.string().url().default('http://localhost:3000'),
+  BASE_URL: z.preprocess(
+    (val) => {
+      if (!val || val === '' || val === '/') return 'http://localhost:3000';
+      if (typeof val === 'string' && !val.startsWith('http://') && !val.startsWith('https://')) {
+        return `http://${val}`;
+      }
+      return val;
+    },
+    z.string().url()
+  ).default('http://localhost:3000'),
   SESSION_SECRET: z.string().min(32),
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().default(587),

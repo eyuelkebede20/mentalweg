@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db';
-import { sessionsTable, clientsTable, paymentsTable, postsTable, materialsTable } from '../db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { sessionsTable, clientsTable, paymentsTable, postsTable, materialsTable, sessionChangesTable } from '../db/schema';
+import { eq, and, desc, sql, gte, isNull, inArray } from 'drizzle-orm';
 import { getSettings } from '../services/settings.service';
 import { createHold } from '../services/hold.service';
 import { verifyReceipt } from '../services/verifier.service';
@@ -33,6 +33,10 @@ export async function publicRoutes(app: FastifyInstance) {
       feeEtb: Math.round(settings.hourlyRateEtb * (settings.schedulingFeePercent / 100)),
       trainingPosters: settings.trainingPosters || [],
       paymentAccounts: (settings.paymentAccounts || []).filter(a => a.active),
+      rescheduleLeadTimeDays: settings.rescheduleLeadTimeDays ?? 7,
+      rescheduleWindowWeeks: settings.rescheduleWindowWeeks ?? 4,
+      allowClientCancellation: settings.allowClientCancellation ?? false,
+      cancellationPolicyText: settings.cancellationPolicyText || 'Appointments cannot be rescheduled or cancelled within 7 days of the scheduled time. For urgent adjustments, please contact the practice directly.',
     };
   });
 
@@ -245,6 +249,311 @@ export async function publicRoutes(app: FastifyInstance) {
       fileUrl: material.fileUrl,
       fileName: material.fileName,
       downloadCount: material.downloadCount + 1,
+    };
+  });
+
+  // --- VERIFIED CLIENT PORTAL & RESCHEDULING API ---
+
+  // 1. Get verified client profile and upcoming sessions with cancellation/reschedule eligibility
+  app.get('/api/m/:token', async (req, reply) => {
+    const paramsSchema = z.object({ token: z.string().min(1) });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid token' });
+
+    const client = db.select().from(clientsTable).where(
+      and(
+        eq(clientsTable.bookingToken, params.data.token),
+        eq(clientsTable.isVerified, true),
+        isNull(clientsTable.deletedAt)
+      )
+    ).all()[0];
+
+    if (!client) {
+      return reply.status(404).send({ error: 'Verified access link not found or invalid.' });
+    }
+
+    const settings = await getSettings();
+    const now = new Date();
+
+    // Fetch upcoming sessions for this client (excluding expired or cancelled)
+    const upcomingSessions = db.select().from(sessionsTable).where(
+      and(
+        eq(sessionsTable.clientId, client.id),
+        gte(sessionsTable.startUtc, now),
+        inArray(sessionsTable.status, ['confirmed', 'held', 'needs_review', 'awaiting_payment'])
+      )
+    ).all().sort((a, b) => new Date(a.startUtc).getTime() - new Date(b.startUtc).getTime());
+
+    const leadTimeDays = settings.rescheduleLeadTimeDays ?? 7;
+    const windowWeeks = settings.rescheduleWindowWeeks ?? 4;
+    const allowCancel = settings.allowClientCancellation ?? false;
+
+    const evaluatedSessions = upcomingSessions.map(s => {
+      const sessionStart = new Date(s.startUtc);
+      const diffMs = sessionStart.getTime() - now.getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+      const canReschedule = diffDays >= leadTimeDays;
+      const canCancel = allowCancel && canReschedule;
+
+      return {
+        id: s.id,
+        startUtc: s.startUtc,
+        durationMin: s.durationMin,
+        status: s.status,
+        feeDueCents: s.feeDueCents,
+        feeWaived: s.feeWaived,
+        daysUntilSession: Math.max(0, Math.floor(diffDays)),
+        canReschedule,
+        canCancel,
+        lockReason: !canReschedule 
+          ? `Changes locked within ${leadTimeDays} days of appointment` 
+          : null,
+      };
+    });
+
+    return {
+      client: {
+        id: client.id,
+        publicId: client.publicId,
+        displayName: client.displayName,
+        phoneE164: client.phoneE164,
+        email: client.email,
+        isVerified: client.isVerified,
+      },
+      policy: {
+        rescheduleLeadTimeDays: leadTimeDays,
+        rescheduleWindowWeeks: windowWeeks,
+        allowClientCancellation: allowCancel,
+        cancellationPolicyText: settings.cancellationPolicyText,
+      },
+      practice: {
+        practiceName: settings.practiceName,
+        locationText: settings.locationText,
+        bio: settings.bio,
+      },
+      sessions: evaluatedSessions,
+    };
+  });
+
+  // 2. Get available slots for verified client rescheduling (horizon: settings.rescheduleWindowWeeks)
+  app.get('/api/m/:token/slots', async (req, reply) => {
+    const paramsSchema = z.object({ token: z.string().min(1) });
+    const querySchema = z.object({
+      duration: z.coerce.number().default(60),
+    });
+
+    const params = paramsSchema.safeParse(req.params);
+    const query = querySchema.safeParse(req.query);
+    if (!params.success || !query.success) {
+      return reply.status(400).send({ error: 'Invalid parameters' });
+    }
+
+    const client = db.select().from(clientsTable).where(
+      and(
+        eq(clientsTable.bookingToken, params.data.token),
+        eq(clientsTable.isVerified, true),
+        isNull(clientsTable.deletedAt)
+      )
+    ).all()[0];
+
+    if (!client) {
+      return reply.status(404).send({ error: 'Verified access link not found or invalid.' });
+    }
+
+    const settings = await getSettings();
+    const windowWeeks = settings.rescheduleWindowWeeks ?? 4;
+    const fromDate = new Date();
+    const toDate = new Date();
+    toDate.setDate(toDate.getDate() + (windowWeeks * 7));
+
+    const slots = await getAvailableSlots(fromDate, toDate, query.data.duration);
+    return { slots, windowWeeks };
+  });
+
+  // 3. Reschedule an appointment
+  app.post('/api/m/:token/sessions/:id/reschedule', async (req, reply) => {
+    const paramsSchema = z.object({
+      token: z.string().min(1),
+      id: z.coerce.number().int(),
+    });
+    const bodySchema = z.object({
+      newStartUtc: z.string().min(1),
+    });
+
+    const params = paramsSchema.safeParse(req.params);
+    const body = bodySchema.safeParse(req.body);
+
+    if (!params.success || !body.success) {
+      return reply.status(400).send({ error: 'Invalid reschedule parameters' });
+    }
+
+    const client = db.select().from(clientsTable).where(
+      and(
+        eq(clientsTable.bookingToken, params.data.token),
+        eq(clientsTable.isVerified, true),
+        isNull(clientsTable.deletedAt)
+      )
+    ).all()[0];
+
+    if (!client) {
+      return reply.status(404).send({ error: 'Verified access link not found or invalid.' });
+    }
+
+    const session = db.select().from(sessionsTable).where(
+      and(
+        eq(sessionsTable.id, params.data.id),
+        eq(sessionsTable.clientId, client.id)
+      )
+    ).all()[0];
+
+    if (!session) {
+      return reply.status(404).send({ error: 'Session not found for this client.' });
+    }
+
+    if (session.status === 'cancelled') {
+      return reply.status(400).send({ error: 'Cancelled sessions cannot be rescheduled.' });
+    }
+
+    const settings = await getSettings();
+    const leadTimeDays = settings.rescheduleLeadTimeDays ?? 7;
+    const now = new Date();
+    const sessionStart = new Date(session.startUtc);
+    const diffMs = sessionStart.getTime() - now.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+    if (diffDays < leadTimeDays) {
+      return reply.status(400).send({
+        error: `Appointments cannot be rescheduled within ${leadTimeDays} days of the scheduled time. Rescheduling is currently locked online. Please contact the practice directly.`,
+        locked: true,
+        leadTimeDays,
+      });
+    }
+
+    const newStart = new Date(body.data.newStartUtc);
+    if (isNaN(newStart.getTime()) || newStart.getTime() <= now.getTime()) {
+      return reply.status(400).send({ error: 'Please choose a valid future appointment time.' });
+    }
+
+    const maxHorizonDays = (settings.rescheduleWindowWeeks ?? 4) * 7;
+    const maxHorizonDate = new Date();
+    maxHorizonDate.setDate(maxHorizonDate.getDate() + maxHorizonDays);
+    if (newStart.getTime() > maxHorizonDate.getTime()) {
+      return reply.status(400).send({ error: `You can only reschedule within the next ${settings.rescheduleWindowWeeks ?? 4} weeks.` });
+    }
+
+    // Verify slot availability with buffer
+    const dayStart = new Date(newStart);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(newStart);
+    dayEnd.setUTCHours(23, 59, 59, 999);
+    const slots = await getAvailableSlots(dayStart, dayEnd, session.durationMin);
+
+    const slotMatches = slots.some(s => Math.abs(new Date(s.startUtc).getTime() - newStart.getTime()) < 60000);
+    if (!slotMatches) {
+      return reply.status(400).send({
+        error: 'The selected slot is unavailable or clashes with operating hours/buffer. Please select another slot.',
+      });
+    }
+
+    const oldStartUtc = session.startUtc;
+
+    // Execute update in db
+    db.update(sessionsTable)
+      .set({
+        startUtc: newStart,
+        status: 'confirmed',
+      })
+      .where(eq(sessionsTable.id, session.id))
+      .run();
+
+    // Log the change in sessionChangesTable with by: 'client'
+    db.insert(sessionChangesTable).values({
+      sessionId: session.id,
+      fromStartUtc: oldStartUtc,
+      toStartUtc: newStart,
+      by: 'client',
+      at: new Date(),
+    }).run();
+
+    return {
+      success: true,
+      message: 'Your appointment has been successfully rescheduled.',
+      sessionId: session.id,
+      previousStartUtc: oldStartUtc,
+      newStartUtc: newStart,
+    };
+  });
+
+  // 4. Cancel an appointment (if permitted by policy)
+  app.post('/api/m/:token/sessions/:id/cancel', async (req, reply) => {
+    const paramsSchema = z.object({
+      token: z.string().min(1),
+      id: z.coerce.number().int(),
+    });
+
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid parameters' });
+
+    const client = db.select().from(clientsTable).where(
+      and(
+        eq(clientsTable.bookingToken, params.data.token),
+        eq(clientsTable.isVerified, true),
+        isNull(clientsTable.deletedAt)
+      )
+    ).all()[0];
+
+    if (!client) {
+      return reply.status(404).send({ error: 'Verified access link not found or invalid.' });
+    }
+
+    const session = db.select().from(sessionsTable).where(
+      and(
+        eq(sessionsTable.id, params.data.id),
+        eq(sessionsTable.clientId, client.id)
+      )
+    ).all()[0];
+
+    if (!session) {
+      return reply.status(404).send({ error: 'Session not found for this client.' });
+    }
+
+    const settings = await getSettings();
+    if (!settings.allowClientCancellation) {
+      return reply.status(400).send({
+        error: 'Online cancellations are disabled by practice policy. Please contact your therapist directly or reschedule to a different slot.',
+      });
+    }
+
+    const leadTimeDays = settings.rescheduleLeadTimeDays ?? 7;
+    const now = new Date();
+    const sessionStart = new Date(session.startUtc);
+    const diffMs = sessionStart.getTime() - now.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+    if (diffDays < leadTimeDays) {
+      return reply.status(400).send({
+        error: `Appointments cannot be cancelled within ${leadTimeDays} days of the scheduled time. Cancellations are currently locked online. Please contact the practice directly.`,
+        locked: true,
+      });
+    }
+
+    db.update(sessionsTable)
+      .set({ status: 'cancelled' })
+      .where(eq(sessionsTable.id, session.id))
+      .run();
+
+    db.insert(sessionChangesTable).values({
+      sessionId: session.id,
+      fromStartUtc: session.startUtc,
+      toStartUtc: session.startUtc,
+      by: 'client',
+      at: new Date(),
+    }).run();
+
+    return {
+      success: true,
+      message: 'Your appointment has been cancelled.',
     };
   });
 }

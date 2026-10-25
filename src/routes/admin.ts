@@ -17,7 +17,8 @@ import {
 import { eq, and, gte, lt, lte, desc, isNull, sql } from 'drizzle-orm';
 import { getSettings, updateSettings } from '../services/settings.service';
 import { sanitizeText, sanitizeEmail, normalizeEthiopianPhone } from '../utils/sanitize';
-import { sendEmail } from '../services/email.service';
+import { sendEmail, sendPatientApprovalEmail } from '../services/email.service';
+import { env } from '../env';
 import { seedHolidays } from '../db/seedHolidays';
 import fs from 'fs';
 import path from 'path';
@@ -202,6 +203,9 @@ export async function adminRoutes(app: FastifyInstance) {
 
     if (!params.success || !body.success) return reply.status(400).send('Invalid request');
 
+    const [existing] = db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id)).all();
+    if (!existing) return reply.status(404).send({ error: 'Session not found' });
+
     const updateData: any = {};
     if (body.data.startUtc) updateData.startUtc = new Date(body.data.startUtc);
     if (body.data.durationMin) updateData.durationMin = body.data.durationMin;
@@ -213,6 +217,16 @@ export async function adminRoutes(app: FastifyInstance) {
       .returning()
       .all();
 
+    if (body.data.startUtc && existing.startUtc.getTime() !== new Date(body.data.startUtc).getTime()) {
+      db.insert(sessionChangesTable).values({
+        sessionId: params.data.id,
+        fromStartUtc: existing.startUtc,
+        toStartUtc: new Date(body.data.startUtc),
+        by: 'admin',
+        at: new Date(),
+      }).run();
+    }
+
     return session;
   });
 
@@ -222,10 +236,21 @@ export async function adminRoutes(app: FastifyInstance) {
     const params = paramsSchema.safeParse(req.params);
     if (!params.success) return reply.status(400).send('Invalid request');
 
-    db.update(sessionsTable)
-      .set({ status: 'cancelled' })
-      .where(eq(sessionsTable.id, params.data.id))
-      .run();
+    const [existing] = db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id)).all();
+    if (existing) {
+      db.update(sessionsTable)
+        .set({ status: 'cancelled' })
+        .where(eq(sessionsTable.id, params.data.id))
+        .run();
+
+      db.insert(sessionChangesTable).values({
+        sessionId: params.data.id,
+        fromStartUtc: existing.startUtc,
+        toStartUtc: existing.startUtc,
+        by: 'admin',
+        at: new Date(),
+      }).run();
+    }
 
     return { success: true };
   });
@@ -366,6 +391,50 @@ export async function adminRoutes(app: FastifyInstance) {
       .all();
 
     return client;
+  });
+
+  // Patient Registration Approval Endpoints
+  app.get('/api/admin/patients/pending', async () => {
+    return db.select().from(clientsTable).where(
+      and(eq(clientsTable.approvalStatus, 'pending'), isNull(clientsTable.deletedAt))
+    ).orderBy(desc(clientsTable.createdAt)).all();
+  });
+
+  app.post('/api/admin/patients/:id/approve', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid ID' });
+
+    const client = db.select().from(clientsTable).where(eq(clientsTable.id, params.data.id)).all()[0];
+    if (!client) return reply.status(404).send({ error: 'Client not found' });
+
+    const token = client.bookingToken || crypto.randomBytes(16).toString('hex');
+    const [updated] = db.update(clientsTable).set({
+      approvalStatus: 'approved',
+      isVerified: true,
+      bookingToken: token,
+    }).where(eq(clientsTable.id, params.data.id)).returning().all();
+
+    // Dispatch approval email
+    if (client.email) {
+      const baseUrl = env.BASE_URL.replace(/\/$/, '');
+      const loginUrl = `${baseUrl}/patient/login`;
+      await sendPatientApprovalEmail(client.email, client.displayName, loginUrl);
+    }
+
+    return { success: true, client: updated };
+  });
+
+  app.post('/api/admin/patients/:id/reject', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid ID' });
+
+    const [updated] = db.update(clientsTable).set({
+      approvalStatus: 'rejected',
+    }).where(eq(clientsTable.id, params.data.id)).returning().all();
+
+    return { success: true, client: updated };
   });
 
   // 5. Payments
@@ -606,11 +675,24 @@ export async function adminRoutes(app: FastifyInstance) {
       clientPhone: c.client?.phoneE164 || '',
     }));
 
+    // Pending patient registration approvals
+    const pendingPatientApprovals = db.select().from(clientsTable).where(
+      and(eq(clientsTable.approvalStatus, 'pending'), isNull(clientsTable.deletedAt))
+    ).orderBy(desc(clientsTable.createdAt)).all().map(c => ({
+      id: c.id,
+      publicId: c.publicId,
+      displayName: c.displayName,
+      email: c.email,
+      phoneE164: c.phoneE164,
+      createdAt: c.createdAt,
+    }));
+
     return {
       dateEAT: eatNow.toISOString().slice(0, 10),
       sessions,
       pendingPayments,
       unappliedPayments,
+      pendingPatientApprovals,
       recentChanges,
       stats: {
         totalToday: sessions.length,
@@ -645,6 +727,16 @@ export async function adminRoutes(app: FastifyInstance) {
         .set({ verified: true, method: 'manual', paidAt: new Date() })
         .where(eq(paymentsTable.sessionId, params.data.id))
         .run();
+    }
+
+    if (body.data.status === 'cancelled' && updated) {
+      db.insert(sessionChangesTable).values({
+        sessionId: params.data.id,
+        fromStartUtc: updated.startUtc,
+        toStartUtc: updated.startUtc,
+        by: 'admin',
+        at: new Date(),
+      }).run();
     }
 
     return { success: true, session: updated };
