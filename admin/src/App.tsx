@@ -100,6 +100,37 @@ function Navigation() {
         </div>
       </nav>
 
+      {/* Mobile Phone Top Header */}
+      <header className="mobile-top-header">
+        <div className="mobile-brand">
+          <div className="brand-logo-sm" style={{ background: accentColor }}>MW</div>
+          <div>
+            <h2 className="mobile-brand-title">Mentalweg</h2>
+            <span className="mobile-brand-badge">Clinical CMS</span>
+          </div>
+        </div>
+        <div className="mobile-header-actions">
+          {canInstall && (
+            <button
+              type="button"
+              className="mobile-install-btn"
+              onClick={async () => {
+                const res = await promptInstall();
+                if (res === 'ios') {
+                  setShowIosTip(true);
+                  setTimeout(() => setShowIosTip(false), 8000);
+                }
+              }}
+              title="Install Clinical App"
+            >
+              <Download className="w-3.5 h-3.5 mr-1" />
+              <span>Install</span>
+            </button>
+          )}
+          <ThemeToggle />
+        </div>
+      </header>
+
       {/* Mobile Phone Bottom Navigation Bar */}
       <nav className="mobile-bottom-nav">
         {navItems.map(item => {

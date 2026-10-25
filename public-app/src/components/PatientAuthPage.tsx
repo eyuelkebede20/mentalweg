@@ -235,14 +235,14 @@ export default function PatientAuthPage({
   };
 
   return (
-    <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1.25rem' }}>
+    <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(1rem, 3vw, 2rem) 1rem' }}>
       <div style={{
         maxWidth: '460px',
         width: '100%',
         background: 'var(--card)',
         border: '1px solid var(--line)',
         borderRadius: '20px',
-        padding: '2.25rem',
+        padding: 'clamp(1.25rem, 4vw, 2.25rem)',
         boxShadow: '0 8px 30px rgba(0, 0, 0, 0.04)',
       }}>
         {/* Back Link */}

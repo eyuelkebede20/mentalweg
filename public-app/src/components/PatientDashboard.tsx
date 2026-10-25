@@ -215,7 +215,7 @@ export default function PatientDashboard({
   const { client, policy, practice, upcomingSessions, pastSessions } = data;
 
   return (
-    <div style={{ maxWidth: '880px', margin: '0 auto', padding: '2rem 1.25rem 4rem' }}>
+    <div style={{ maxWidth: '880px', margin: '0 auto', padding: 'clamp(1rem, 3vw, 2rem) clamp(0.85rem, 3vw, 1.25rem) calc(4rem + env(safe-area-inset-bottom, 0px))' }}>
       {/* Top Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -276,7 +276,7 @@ export default function PatientDashboard({
         background: 'var(--card)',
         border: '1px solid var(--line)',
         borderRadius: '16px',
-        padding: '1.75rem',
+        padding: 'clamp(1.1rem, 3vw, 1.75rem)',
         marginBottom: '2rem',
         boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
         display: 'flex',

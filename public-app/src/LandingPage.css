@@ -1317,6 +1317,89 @@ html:has(.landing-viewport-wrap) {
   }
 }
 
+@media (max-width: 640px) {
+  .landing-navbar {
+    padding: 0 0.85rem;
+    height: 60px;
+  }
+  .brand-sub {
+    display: none;
+  }
+  .brand-name {
+    font-size: 1.05rem;
+  }
+  .brand-emblem {
+    width: 32px;
+    height: 32px;
+    font-size: 0.95rem;
+  }
+  .nav-right-cluster {
+    gap: 0.35rem;
+  }
+  .nav-install-btn {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.75rem;
+  }
+  .nav-install-btn span {
+    display: none;
+  }
+  .theme-toggle-btn {
+    width: 34px;
+    height: 34px;
+  }
+  .nav-cta-btn {
+    padding: 0.5rem 0.9rem;
+    font-size: 0.82rem;
+  }
+  .stage-pane {
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: calc(60px + 1rem) 1rem calc(68px + env(safe-area-inset-bottom, 0px));
+  }
+  .stage-content-box {
+    max-width: 100%;
+  }
+  .hero-headline {
+    font-size: 1.85rem !important;
+    line-height: 1.25 !important;
+  }
+  .hero-bio {
+    font-size: 0.95rem !important;
+    line-height: 1.5 !important;
+  }
+  .stage-heading {
+    font-size: 1.6rem !important;
+    line-height: 1.25 !important;
+  }
+  .posters-deck,
+  .articles-deck,
+  .materials-deck {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .stage-bottom-hint {
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    padding: 0 0.75rem;
+  }
+  .bottom-hint-btn {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .landing-navbar {
+    padding: 0 0.5rem;
+  }
+  .brand-name {
+    font-size: 0.95rem;
+  }
+  .nav-cta-btn {
+    padding: 0.45rem 0.7rem;
+    font-size: 0.78rem;
+  }
+}
+
 
 /* ========================================= */
 /* ========================================= */
