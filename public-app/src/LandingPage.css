@@ -131,6 +131,13 @@
   background-size: 24px 24px;
 }
 
+/* NATIVE CSS SCROLL SNAP FOR SANCTUARY LANDING */
+html.landing-snap-active,
+html:has(.landing-viewport-wrap) {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
 /* TOP PROGRESS BAR */
 .scroll-progress-line {
   position: fixed;
@@ -321,175 +328,51 @@
   box-shadow: 0 4px 14px rgba(20, 36, 30, 0.18);
 }
 
-/* PERSISTENT EMERGENCY CRISIS LIFELINE */
-.nav-crisis-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(184, 98, 61, 0.08);
-  border: 1px solid rgba(184, 98, 61, 0.26);
-  color: var(--terra-600);
-  padding: 0.4rem 0.85rem;
-  border-radius: 9999px;
-  font-size: 0.8rem;
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  line-height: 1;
-}
-
-.nav-crisis-pill:hover {
-  background: rgba(184, 98, 61, 0.16);
-  border-color: var(--terra-600);
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(184, 98, 61, 0.15);
-}
-
-.crisis-pulse-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--terra-600);
-  box-shadow: 0 0 0 0 rgba(184, 98, 61, 0.7);
-  animation: gentleCrisisPulse 2.8s infinite;
-  flex-shrink: 0;
-}
-
-@keyframes gentleCrisisPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(184, 98, 61, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(184, 98, 61, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(184, 98, 61, 0);
-  }
-}
-
-.crisis-pill-text {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.crisis-pill-label {
-  font-size: 0.74rem;
-  color: var(--muted-text);
-  font-weight: 500;
-}
-
-.crisis-pill-number {
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: var(--terra-600);
-}
-
-/* 3. VIRTUAL SCROLL TRACK */
-.landing-scroll-track {
+/* 3. SANCTUARY STAGES VIEWPORT & CSS SCROLL SNAP */
+.landing-stage-viewport {
   position: relative;
   width: 100%;
-  height: 500vh; /* 100vh per stage, driving the window scroll height */
-  pointer-events: none;
-  visibility: hidden;
-}
-
-.scroll-track-step {
-  height: 100vh;
-  width: 100%;
-}
-
-/* 4. PINNED STAGE VIEWPORT (STAGE BODY) */
-.landing-stage-viewport {
-  position: fixed;
-  top: 72px;
-  bottom: 0;
-  left: 0;
-  right: 0;
   z-index: 10;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  pointer-events: none; /* Passes clicks through except on stage content */
+  flex-direction: column;
 }
 
-/* INDIVIDUAL STAGE PANES */
+/* INDIVIDUAL STAGE PANES (NATIVE CSS SCROLL SNAP SECTIONS) */
 .stage-pane {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem 3rem 4rem;
+  padding: calc(72px + 2rem) 2.5rem 4rem;
   box-sizing: border-box;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  will-change: transform, opacity;
-  transition: transform 0.72s var(--ease-out-expo),
-              opacity 0.6s var(--ease-out-expo),
-              visibility 0.72s step-end;
-}
-
-/* Active State: Centered, fully opaque, interactive */
-.stage-pane.is-active {
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+  z-index: 10;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateY(0) scale(1);
-  transition: transform 0.72s var(--ease-out-expo),
-              opacity 0.6s var(--ease-out-expo),
-              visibility 0s;
-  z-index: 20;
 }
 
-/* Previous State: Explicitly situated ABOVE the viewport (-75vh) */
-.stage-pane.is-prev {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-75vh) scale(0.95);
-  z-index: 10;
-}
-
-/* Next State: Explicitly situated BELOW the viewport (+75vh) */
-.stage-pane.is-next {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(75vh) scale(0.95);
-  z-index: 10;
-}
-
-/* STAGE CONTENT BOX: REFINED MICRO-PARALLAX */
+/* STAGE CONTENT BOX: CENTERED CONTENT CONTAINER */
 .stage-content-box {
   width: 100%;
   max-width: 900px;
-  max-height: calc(100vh - 120px);
   margin: 0 auto;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  will-change: transform;
-  transition: transform 0.76s var(--ease-out-expo);
-}
-
-.stage-pane.is-active .stage-content-box {
-  transform: translateY(0);
-}
-
-.stage-pane.is-prev .stage-content-box {
-  transform: translateY(-30px);
-}
-
-.stage-pane.is-next .stage-content-box {
-  transform: translateY(30px);
 }
 
 .posters-content-box {
   max-width: 1040px;
+}
+
+.articles-content-box,
+.materials-content-box {
+  max-width: 1080px;
 }
 
 /* CUSTOM INTERNAL SCROLLBAR FOR SCROLLABLE CARD CONTENTS */
@@ -1001,54 +884,8 @@
 }
 
 /* ======================================================== */
-/* STAGE 4: CARE NETWORK, EMERGENCY & CLOSING               */
+/* STAGE 7: APPOINTMENTS & RESERVATIONS                     */
 /* ======================================================== */
-.crisis-banner-card {
-  width: 100%;
-  max-width: 780px;
-  background: #ffffff;
-  border: 1px solid rgba(184, 98, 61, 0.25);
-  border-left: 4px solid var(--terra-600);
-  padding: 1.15rem 1.35rem;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  gap: 1.15rem;
-  box-shadow: var(--card-shadow);
-  margin-bottom: 1.25rem;
-  box-sizing: border-box;
-}
-
-.crisis-icon-circle {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--terra-100);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.crisis-title {
-  display: block;
-  font-size: 0.92rem;
-  color: var(--forest-900);
-  margin-bottom: 0.2rem;
-}
-
-.crisis-details p {
-  margin: 0;
-  font-size: 0.86rem;
-  color: var(--muted-text);
-  line-height: 1.45;
-}
-
-.hotline-number {
-  color: var(--terra-600);
-  font-size: 1.05rem;
-}
-
 .booking-summary-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3492,7 +3329,6 @@
 [data-theme="dark"] .poster-card-compact,
 [data-theme="dark"] .posters-empty-card,
 [data-theme="dark"] .sanctuary-feature-card,
-[data-theme="dark"] .crisis-banner-card,
 [data-theme="dark"] .step-mini-card,
 [data-theme="dark"] .convention-card,
 [data-theme="dark"] .convention-info-card,
@@ -3838,30 +3674,6 @@
   color: var(--forest-900);
 }
 
-/* CRISIS LIFELINE IN DARK MODE */
-[data-theme="dark"] .nav-crisis-pill {
-  background: rgba(224, 122, 80, 0.12);
-  border-color: rgba(224, 122, 80, 0.32);
-  color: #f39c74;
-}
-
-[data-theme="dark"] .nav-crisis-pill:hover {
-  background: rgba(224, 122, 80, 0.22);
-  border-color: #f39c74;
-}
-
-[data-theme="dark"] .crisis-pulse-dot {
-  background: #f39c74;
-}
-
-[data-theme="dark"] .crisis-pill-label {
-  color: var(--muted-text);
-}
-
-[data-theme="dark"] .crisis-pill-number {
-  color: #f39c74;
-}
-
 /* ======================================================== */
 /* 10. ACCESSIBILITY: FOCUS INDICATORS & MOTION REDUCTION   */
 /* ======================================================== */
@@ -3869,7 +3681,6 @@
 /* Focus-visible rings for WCAG 2.4.7 */
 .stage-rail-node:focus-visible,
 .bottom-hint-btn:focus-visible,
-.nav-crisis-pill:focus-visible,
 .theme-toggle-btn:focus-visible,
 .btn-primary-action:focus-visible,
 .btn-secondary-action:focus-visible,
@@ -3883,7 +3694,6 @@
 
 [data-theme="dark"] .stage-rail-node:focus-visible,
 [data-theme="dark"] .bottom-hint-btn:focus-visible,
-[data-theme="dark"] .nav-crisis-pill:focus-visible,
 [data-theme="dark"] .theme-toggle-btn:focus-visible,
 [data-theme="dark"] .btn-primary-action:focus-visible,
 [data-theme="dark"] .btn-secondary-action:focus-visible,
@@ -3909,7 +3719,6 @@
   .stage-rail-node,
   .rail-node-dot,
   .rail-node-label,
-  .crisis-pulse-dot,
   .hint-chevron-down {
     animation: none !important;
     transition-duration: 0.01ms !important;

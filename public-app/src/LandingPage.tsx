@@ -11,7 +11,6 @@ import {
   Eye,
   X,
   ArrowUp,
-  PhoneCall,
   CheckCircle2,
   Moon,
   Sun,
@@ -92,7 +91,7 @@ const STAGES: StageInfo[] = [
   { id: 'insights', label: 'Articles & Blog', short: '04', eyebrow: 'Reflections & Clinical Guidance' },
   { id: 'materials', label: 'Clinical Tools', short: '05', eyebrow: 'Worksheets, Guides & Protocols' },
   { id: 'care', label: 'In-Person Care', short: '06', eyebrow: 'Sanctuary & Practice Standards' },
-  { id: 'support', label: 'Care & Support', short: '07', eyebrow: 'Appointments & Emergency Support' },
+  { id: 'support', label: 'Appointments', short: '07', eyebrow: 'Appointments & Scheduling' },
 ];
 
 function formatFileSize(bytes: number): string {
@@ -126,8 +125,6 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
   const activeStepRef = useRef<number>(0);
   const selectedPosterRef = useRef<Poster | null>(null);
   const selectedPostRef = useRef<BlogPost | null>(null);
-  const isTransitioningRef = useRef<boolean>(false);
-  const touchStartY = useRef<number>(0);
 
   // Keep refs in sync for event listeners
   useEffect(() => {
@@ -135,6 +132,14 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
     selectedPosterRef.current = selectedPoster;
     selectedPostRef.current = selectedPost;
   }, [activeStep, selectedPoster, selectedPost]);
+
+  // Enable CSS scroll snapping on HTML when landing page is active
+  useEffect(() => {
+    document.documentElement.classList.add('landing-snap-active');
+    return () => {
+      document.documentElement.classList.remove('landing-snap-active');
+    };
+  }, []);
 
   // Fetch published blog posts and patient materials
   useEffect(() => {
@@ -243,144 +248,75 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
     return elements;
   };
 
-  // Smooth jump to specific stage
+  // Smooth jump to specific stage using native smooth scroll
   const goToStep = useCallback((stepIndex: number) => {
     const targetStep = Math.max(0, Math.min(STAGES.length - 1, stepIndex));
     if (targetStep !== activeStepRef.current) {
       setScrollDirection(targetStep > activeStepRef.current ? 'down' : 'up');
     }
     setActiveStep(targetStep);
-    isTransitioningRef.current = true;
 
-    const viewportHeight = window.innerHeight || 800;
-    const maxScroll = (STAGES.length - 1) * viewportHeight;
-    const targetY = targetStep * viewportHeight;
-
-    window.scrollTo({
-      top: targetY,
-      behavior: 'smooth'
-    });
-
-    const progress = maxScroll > 0 ? targetY / maxScroll : 0;
-    setScrollProgress(progress);
-
-    setTimeout(() => {
-      isTransitioningRef.current = false;
-    }, 650);
+    const stageEl = document.getElementById(`stage-pane-${targetStep}`);
+    if (stageEl) {
+      stageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      const viewportHeight = window.innerHeight || 800;
+      window.scrollTo({
+        top: targetStep * viewportHeight,
+        behavior: 'smooth'
+      });
+    }
   }, []);
 
-  // Window scroll listener: calculates active step when user scrolls or drags scrollbar
+  // IntersectionObserver: tracks active stage with 100% native physics
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const idxStr = entry.target.getAttribute('data-stage-index');
+            if (idxStr !== null) {
+              const idx = parseInt(idxStr, 10);
+              if (!isNaN(idx) && idx !== activeStepRef.current) {
+                setScrollDirection(idx > activeStepRef.current ? 'down' : 'up');
+                setActiveStep(idx);
+              }
+            }
+          }
+        }
+      },
+      {
+        threshold: 0.45,
+        rootMargin: '-10% 0px -10% 0px'
+      }
+    );
+
+    const stages = document.querySelectorAll('.stage-pane');
+    stages.forEach(stage => observer.observe(stage));
+
+    return () => observer.disconnect();
+  }, [posts.length, materials.length]);
+
+  // Passive scroll progress listener (updates top progress bar & direction)
   useEffect(() => {
     let lastScrollY = window.scrollY;
 
     const handleScroll = () => {
-      if (isTransitioningRef.current) return;
-
       const scrollY = window.scrollY;
-      const viewportHeight = window.innerHeight || 800;
-      const maxScroll = (STAGES.length - 1) * viewportHeight;
-
-      if (maxScroll <= 0) return;
-
-      const progress = Math.min(1, Math.max(0, scrollY / maxScroll));
-      setScrollProgress(progress);
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (maxScroll > 0) {
+        setScrollProgress(Math.min(1, Math.max(0, scrollY / maxScroll)));
+      }
 
       if (Math.abs(scrollY - lastScrollY) > 8) {
         setScrollDirection(scrollY > lastScrollY ? 'down' : 'up');
         lastScrollY = scrollY;
-      }
-
-      const calculatedStep = Math.min(
-        STAGES.length - 1,
-        Math.max(0, Math.round(progress * (STAGES.length - 1)))
-      );
-
-      if (calculatedStep !== activeStepRef.current) {
-        setActiveStep(calculatedStep);
       }
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  // Wheel listener: intercepts wheel deltas to smoothly transition data cards
-  useEffect(() => {
-    let lastWheelTime = 0;
-
-    const handleWheel = (e: WheelEvent) => {
-      // If modal is active, allow normal scrolling inside modal
-      if (selectedPosterRef.current || selectedPostRef.current) return;
-
-      // Check if user is scrolling inside an internal scrollable element (e.g. posters grid)
-      const target = e.target as HTMLElement | null;
-      const scrollable = target?.closest('.allow-internal-scroll') as HTMLElement | null;
-      if (scrollable && scrollable.scrollHeight > scrollable.clientHeight) {
-        const atTop = scrollable.scrollTop <= 2 && e.deltaY < 0;
-        const atBottom = scrollable.scrollTop + scrollable.clientHeight >= scrollable.scrollHeight - 4 && e.deltaY > 0;
-        if (!atTop && !atBottom) {
-          return; // Let internal element scroll freely
-        }
-      }
-
-      if (Math.abs(e.deltaY) < 18) return;
-
-      const now = Date.now();
-      if (now - lastWheelTime < 650) {
-        e.preventDefault();
-        return;
-      }
-
-      if (e.deltaY > 0) {
-        // Scrolling down
-        if (activeStepRef.current < STAGES.length - 1) {
-          e.preventDefault();
-          lastWheelTime = now;
-          goToStep(activeStepRef.current + 1);
-        }
-      } else if (e.deltaY < 0) {
-        // Scrolling up
-        if (activeStepRef.current > 0) {
-          e.preventDefault();
-          lastWheelTime = now;
-          goToStep(activeStepRef.current - 1);
-        }
-      }
-    };
-
-    window.addEventListener('wheel', handleWheel, { passive: false });
-    return () => window.removeEventListener('wheel', handleWheel);
-  }, [goToStep]);
-
-  // Touch gesture listener for mobile swipe transitions
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      if (selectedPosterRef.current || selectedPostRef.current) return;
-      touchStartY.current = e.touches[0].clientY;
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (selectedPosterRef.current || selectedPostRef.current) return;
-      const touchEndY = e.changedTouches[0].clientY;
-      const deltaY = touchStartY.current - touchEndY;
-
-      // Minimum swipe threshold
-      if (Math.abs(deltaY) > 50) {
-        if (deltaY > 0 && activeStepRef.current < STAGES.length - 1) {
-          goToStep(activeStepRef.current + 1);
-        } else if (deltaY < 0 && activeStepRef.current > 0) {
-          goToStep(activeStepRef.current - 1);
-        }
-      }
-    };
-
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [goToStep]);
 
   // Keyboard navigation (Arrow keys, PageUp/Down, Home, End, Space)
   useEffect(() => {
@@ -450,21 +386,6 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
         </div>
 
         <div className="nav-right-cluster">
-          {/* PERSISTENT 24/7 CRISIS LIFELINE */}
-          <a
-            href="tel:907"
-            className="nav-crisis-pill"
-            aria-label="Call 907 national mental health crisis hotline, free 24/7"
-            title="Immediate free crisis support · Call 907"
-          >
-            <span className="crisis-pulse-dot" aria-hidden="true" />
-            <PhoneCall className="w-3.5 h-3.5 text-terra" />
-            <span className="crisis-pill-text">
-              <span className="crisis-pill-label">Crisis Support</span>
-              <strong className="crisis-pill-number">907</strong>
-            </span>
-          </a>
-
           {canInstall && (
             <button
               type="button"
@@ -502,14 +423,7 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
         </div>
       </header>
 
-      {/* 3. VIRTUAL SCROLL TRACK: ENABLES NATIVE SCROLLBAR & WHEEL DYNAMICS WHILE KEEPING BACKDROP STATIC */}
-      <div className="landing-scroll-track" aria-hidden="true">
-        {STAGES.map((s, idx) => (
-          <div key={s.id} className="scroll-track-step" id={`scroll-anchor-${idx}`} />
-        ))}
-      </div>
-
-      {/* 4. PINNED STAGE VIEWPORT: ONLY THE DATA THAT POPULATES CHANGES */}
+      {/* 3. SANCTUARY STAGES VIEWPORT */}
       <main className={`landing-stage-viewport scroll-dir-${scrollDirection}`}>
 
         {/* ================= STAGE 0: HERO & SANCTUARY ================= */}
@@ -965,7 +879,7 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
           </div>
         </article>
 
-        {/* ================= STAGE 6: CARE NETWORK & EMERGENCY SUPPORT ================= */}
+        {/* ================= STAGE 7: APPOINTMENTS & RESERVATIONS ================= */}
         <article
           id="stage-pane-6"
           data-stage-index="6"
@@ -980,20 +894,6 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
                 Whether for individual therapeutic consultation or psychoeducational guidance, booking is
                 seamless and confidential.
               </p>
-            </div>
-
-            {/* Emergency Hotline Notice */}
-            <div className="crisis-banner-card">
-              <div className="crisis-icon-circle">
-                <PhoneCall className="w-5 h-5 text-terra" />
-              </div>
-              <div className="crisis-details">
-                <strong className="crisis-title">Immediate Emergency Psychological Support</strong>
-                <p>
-                  If you or someone you know is in acute distress, please call the national mental health line at{' '}
-                  <strong className="hotline-number">907</strong> or contact your nearest medical emergency facility.
-                </p>
-              </div>
             </div>
 
             {/* Booking Steps Summary */}
