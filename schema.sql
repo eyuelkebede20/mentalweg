@@ -237,6 +237,12 @@ CREATE TABLE IF NOT EXISTS `materials` (
 -- INITIAL DEFAULT SEED DATA
 -- ==============================================================================
 
+-- Default Primary Administrator (Email: admin@example.com / Password: admin123)
+-- Password hash generated using argon2id (compatible with Mentalweg authentication)
+INSERT OR IGNORE INTO `admin` (`id`, `email`, `password_hash`)
+VALUES
+  (1, 'admin@example.com', '$argon2id$v=19$m=65536,p=4,t=3$R98yJhiko8VHvEUZ5UCG1g$Ubc3s76tARr21fx+CWAF5977A41qtHS90R1NPcw0wQw');
+
 -- Default Payment Accounts (Telebirr & Commercial Bank of Ethiopia)
 INSERT OR IGNORE INTO `payment_accounts` (`id`, `provider`, `account_number`, `holder_name`, `active`)
 VALUES
