@@ -87,6 +87,7 @@ const prodPkg = {
 delete prodPkg.dependencies.tsx;
 
 fs.writeFileSync(path.join(bundleDir, 'package.json'), JSON.stringify(prodPkg, null, 2), 'utf8');
+fs.writeFileSync(path.join(rootAppDir, 'package.json'), JSON.stringify(prodPkg, null, 2), 'utf8');
 
 // 6. Install self-contained production node_modules with Linux x64 binaries
 console.log('📦 Step 6: Installing production node_modules inside app/node_modules...');
@@ -133,9 +134,10 @@ process.env.HOSTNAME = '0.0.0.0';
 
 const appDir = path.resolve(__dirname, 'app');
 const appNodeModules = path.join(appDir, 'node_modules');
+const rootNodeModules = path.join(__dirname, 'node_modules');
 
-// 1. Prepend app/node_modules to NODE_PATH
-process.env.NODE_PATH = [appNodeModules, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
+// 1. Prepend app/node_modules and root node_modules to NODE_PATH
+process.env.NODE_PATH = [appNodeModules, rootNodeModules, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
 require('node:module').Module._initPaths();
 
 // 2. Load .env file from application root, parent, or app subfolder first
