@@ -225,6 +225,12 @@ VAPID_PRIVATE_KEY=
 `;
 fs.writeFileSync(path.join(rootAppDir, '.env.example'), envExample, 'utf8');
 
+// Copy standalone database schema.sql to application root
+const schemaSqlSource = path.join(rootDir, 'schema.sql');
+if (fs.existsSync(schemaSqlSource)) {
+  fs.copyFileSync(schemaSqlSource, path.join(rootAppDir, 'schema.sql'));
+}
+
 // 8. Create Zip Bundle (Optional offline archive)
 console.log('🗜️ Step 8: Generating mentalweg-cpanel-bundle.zip archive...');
 try {
