@@ -115,6 +115,12 @@ fs.mkdirSync(tmpDir, { recursive: true });
 const gitSha = process.env.GITHUB_SHA || '';
 fs.writeFileSync(path.join(tmpDir, 'restart.txt'), `restart ${gitSha || 'release'}\n`, 'utf8');
 
+// Ensure root .htaccess exists so CloudLinux clselector never throws FileNotFoundError
+const htaccessFile = path.join(rootAppDir, '.htaccess');
+if (!fs.existsSync(htaccessFile)) {
+  fs.writeFileSync(htaccessFile, '# CloudLinux Passenger Configuration\n', 'utf8');
+}
+
 // Create app.cjs startup file at application root
 const appCjs = `// Phusion Passenger / CloudLinux Node.js Selector startup shim
 // CloudLinux owns root 'node_modules' as a symlink to its virtualenv.
@@ -174,8 +180,15 @@ try {
 }
 
 // 6. Boot the compiled Fastify server
-const serverEntry = path.join(appDir, 'dist', 'server.js');
-require(serverEntry);
+try {
+  const serverEntry = path.join(appDir, 'dist', 'server.js');
+  require(serverEntry);
+} catch (err) {
+  const errorLog = path.join(__dirname, 'startup-error.log');
+  fs.writeFileSync(errorLog, '[ ' + new Date().toISOString() + ' ] Server startup failed:\\n' + (err.stack || err) + '\\n', 'utf8');
+  console.error('[Fatal Error] Server boot failed:', err);
+  process.exit(1);
+}
 `;
 fs.writeFileSync(path.join(rootAppDir, 'app.cjs'), appCjs, 'utf8');
 
