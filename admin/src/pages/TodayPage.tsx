@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   X
 } from 'lucide-react';
+import { PaymentReviewModal, type PaymentReviewDetails } from '../components/PaymentReviewModal';
 
 interface ClientInfo {
   id: number;
@@ -105,6 +106,7 @@ export default function TodayPage() {
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [notificationMsg, setNotificationMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [viewScreenshotUrl, setViewScreenshotUrl] = useState<string | null>(null);
+  const [reviewPayment, setReviewPayment] = useState<PaymentReviewDetails | null>(null);
 
   const fetchTodayData = async () => {
     try {
@@ -133,28 +135,6 @@ export default function TodayPage() {
     setTimeout(() => setNotificationMsg(null), 5000);
   };
 
-  // 1. Manual confirm payment
-  const handleConfirmPayment = async (paymentId: number) => {
-    setActionLoading(paymentId);
-    try {
-      const res = await fetch(`/api/admin/payments/${paymentId}/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (res.ok) {
-        showToast('Payment verified successfully. Session confirmed!');
-        fetchTodayData();
-      } else {
-        const err = await res.json();
-        showToast(err.error || 'Failed to confirm payment', 'error');
-      }
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
   // 2. Attendance change
   const handleAttendanceChange = async (sessionId: number, status: 'attended' | 'no_show' | 'confirmed') => {
@@ -490,35 +470,13 @@ export default function TodayPage() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {p.screenshotPath && (
-                    <button
-                      onClick={() => setViewScreenshotUrl(p.screenshotPath!.startsWith('/') ? p.screenshotPath! : `/${p.screenshotPath}`)}
-                      style={{
-                        background: 'var(--off)',
-                        border: '1px solid var(--line)',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        color: 'var(--ink)',
-                      }}
-                    >
-                      <Eye className="w-4 h-4" /> View Screenshot
-                    </button>
-                  )}
-
                   <button
-                    onClick={() => handleConfirmPayment(p.id)}
-                    disabled={actionLoading === p.id}
+                    onClick={() => setReviewPayment(p)}
                     style={{
                       background: 'var(--acc)',
                       border: 'none',
                       color: '#fff',
-                      padding: '8px 14px',
+                      padding: '8px 16px',
                       borderRadius: '6px',
                       fontSize: '12px',
                       fontWeight: 700,
@@ -526,10 +484,11 @@ export default function TodayPage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                     }}
                   >
-                    <CheckCircle className="w-4 h-4" />
-                    {actionLoading === p.id ? 'Confirming...' : 'Confirm Manually'}
+                    <Eye className="w-4 h-4" />
+                    Review & Decide
                   </button>
                 </div>
               </div>
@@ -558,21 +517,34 @@ export default function TodayPage() {
                   </div>
                   <span style={{ fontSize: '12px', color: 'var(--mut)' }}>Paid after hold expired or hold cancelled. Unlinked in database.</span>
                 </div>
-                {p.screenshotPath && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
-                    onClick={() => setViewScreenshotUrl(`/${p.screenshotPath}`)}
+                    onClick={() => setReviewPayment({
+                      id: p.id,
+                      provider: p.provider,
+                      reference: p.reference,
+                      amountCents: p.amountCents,
+                      paidAt: p.paidAt,
+                      screenshotPath: p.screenshotPath,
+                    })}
                     style={{
                       background: 'var(--off)',
                       border: '1px solid var(--line)',
-                      padding: '6px 10px',
+                      color: 'var(--ink)',
+                      padding: '6px 12px',
                       borderRadius: '6px',
                       fontSize: '12px',
+                      fontWeight: 600,
                       cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
                     }}
                   >
-                    View Screenshot
+                    <Eye className="w-3.5 h-3.5" />
+                    Review Slip
                   </button>
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -879,6 +851,20 @@ export default function TodayPage() {
           </div>
         </div>
       )}
+      {/* PAYMENT REVIEW & DECISION MODAL */}
+      <PaymentReviewModal
+        payment={reviewPayment}
+        isOpen={Boolean(reviewPayment)}
+        onClose={() => setReviewPayment(null)}
+        onPaymentConfirmed={() => {
+          showToast('Payment verified successfully. Session confirmed!');
+          fetchTodayData();
+        }}
+        onPaymentRejected={() => {
+          showToast('Payment rejected. Session slot cancelled and released.');
+          fetchTodayData();
+        }}
+      />
     </div>
   );
 }

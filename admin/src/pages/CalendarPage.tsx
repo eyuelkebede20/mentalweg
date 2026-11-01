@@ -24,6 +24,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { ClientSearchSelect, type ClientItem } from '../components/ClientSearchSelect';
+import { PaymentReviewModal, type PaymentReviewDetails } from '../components/PaymentReviewModal';
 
 const BLOCK_REASON_PRESETS = [
   'Personal Off / Maintenance',
@@ -105,6 +106,7 @@ export default function CalendarPage() {
   const [selectedSession, setSelectedSession] = useState<any | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [viewScreenshotUrl, setViewScreenshotUrl] = useState<string | null>(null);
+  const [reviewPayment, setReviewPayment] = useState<PaymentReviewDetails | null>(null);
 
   // "Let client know?" Prompt Modal / Toast after Reschedule or Cancellation
   const [notifyPrompt, setNotifyPrompt] = useState<{
@@ -499,42 +501,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Approve Payment Directly
-  const handleApprovePayment = async () => {
-    if (!selectedSession) return;
-    setActionLoading(true);
-    try {
-      let res;
-      if (selectedSession.paymentId) {
-        res = await fetch(`/api/admin/payments/${selectedSession.paymentId}/confirm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-      } else {
-        res = await fetch(`/api/admin/sessions/${selectedSession.id}/attendance`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'confirmed' }),
-        });
-      }
-      if (res.ok) {
-        showToast('Payment approved & session confirmed!');
-        setSelectedSession((prev: any) => ({
-          ...prev,
-          status: 'confirmed',
-          paymentVerified: true,
-        }));
-        loadSessions();
-      } else {
-        showToast('Failed to approve payment', 'error');
-      }
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   // Remove / Cancel Session
   const handleCancelSession = async () => {
@@ -1863,24 +1829,44 @@ export default function CalendarPage() {
                   {!selectedSession.paymentVerified && (
                     <button
                       type="button"
-                      onClick={handleApprovePayment}
+                      onClick={() => setReviewPayment({
+                        id: selectedSession.paymentId,
+                        provider: selectedSession.paymentProvider || 'Transfer',
+                        reference: selectedSession.paymentReference || 'N/A',
+                        amountCents: selectedSession.feeDueCents || 30000,
+                        paidAt: selectedSession.paymentPaidAt || null,
+                        screenshotPath: selectedSession.paymentScreenshotPath,
+                        client: {
+                          displayName: selectedSession.clientName,
+                          phoneE164: selectedSession.clientPhone,
+                          email: selectedSession.clientEmail,
+                        },
+                        session: {
+                          id: selectedSession.id,
+                          startUtc: selectedSession.start,
+                          durationMin: selectedSession.durationMin,
+                          status: selectedSession.status,
+                          feeDueCents: selectedSession.feeDueCents,
+                        }
+                      })}
                       disabled={actionLoading}
                       style={{
                         padding: '6px 14px',
                         borderRadius: '6px',
                         border: 'none',
-                        background: '#16a34a',
+                        background: 'var(--acc)',
                         color: '#fff',
                         fontSize: '12px',
                         fontWeight: 700,
                         cursor: 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        gap: '6px',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                       }}
                     >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      {actionLoading ? 'Approving...' : 'Approve Payment & Confirm Slot'}
+                      <Eye className="w-3.5 h-3.5" />
+                      Review Slip & Decide
                     </button>
                   )}
                 </div>
@@ -2018,6 +2004,28 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+      {/* PAYMENT REVIEW & DECISION MODAL */}
+      <PaymentReviewModal
+        payment={reviewPayment}
+        isOpen={Boolean(reviewPayment)}
+        onClose={() => setReviewPayment(null)}
+        onPaymentConfirmed={() => {
+          showToast('Payment approved & session confirmed!');
+          if (selectedSession) {
+            setSelectedSession({
+              ...selectedSession,
+              status: 'confirmed',
+              paymentVerified: true
+            });
+          }
+          loadSessions();
+        }}
+        onPaymentRejected={() => {
+          showToast('Payment rejected and session slot cancelled.');
+          setSelectedSession(null);
+          loadSessions();
+        }}
+      />
     </div>
   );
 }

@@ -14,7 +14,7 @@ import {
   postsTable,
   materialsTable
 } from '../db/schema';
-import { eq, and, gte, lt, lte, desc, isNull, sql } from 'drizzle-orm';
+import { eq, and, ne, gte, lt, lte, desc, isNull, sql } from 'drizzle-orm';
 import { getSettings, updateSettings } from '../services/settings.service';
 import { sanitizeText, sanitizeEmail, normalizeEthiopianPhone } from '../utils/sanitize';
 import { sendEmail, sendPatientApprovalEmail } from '../services/email.service';
@@ -158,6 +158,8 @@ export async function adminRoutes(app: FastifyInstance) {
       paymentReference: payment?.reference,
       paymentScreenshotPath: payment?.screenshotPath,
       paymentVerified: payment?.verified ?? false,
+      paymentMethod: payment?.method,
+      paymentPaidAt: payment?.paidAt,
     }));
   });
 
@@ -513,7 +515,7 @@ export async function adminRoutes(app: FastifyInstance) {
     .from(paymentsTable)
     .leftJoin(sessionsTable, eq(paymentsTable.sessionId, sessionsTable.id))
     .leftJoin(clientsTable, eq(sessionsTable.clientId, clientsTable.id))
-    .where(eq(paymentsTable.verified, false))
+    .where(and(eq(paymentsTable.verified, false), ne(paymentsTable.method, 'rejected')))
     .all();
 
     return pending.map(p => ({
@@ -528,14 +530,46 @@ export async function adminRoutes(app: FastifyInstance) {
     }));
   });
 
+  app.get('/api/admin/payments/:id', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid request' });
+
+    const [row] = db.select({
+      payment: paymentsTable,
+      session: sessionsTable,
+      client: clientsTable,
+    })
+    .from(paymentsTable)
+    .leftJoin(sessionsTable, eq(paymentsTable.sessionId, sessionsTable.id))
+    .leftJoin(clientsTable, eq(sessionsTable.clientId, clientsTable.id))
+    .where(eq(paymentsTable.id, params.data.id))
+    .all();
+
+    if (!row) return reply.status(404).send({ error: 'Payment not found' });
+
+    return {
+      id: row.payment.id,
+      provider: row.payment.provider,
+      reference: row.payment.reference,
+      amountCents: row.payment.amountCents,
+      screenshotPath: row.payment.screenshotPath,
+      paidAt: row.payment.paidAt,
+      verified: row.payment.verified,
+      method: row.payment.method,
+      session: row.session,
+      client: row.client,
+    };
+  });
+
   app.post('/api/admin/payments/:id/confirm', async (req, reply) => {
     const paramsSchema = z.object({ id: z.coerce.number().int() });
     const params = paramsSchema.safeParse(req.params);
-    if (!params.success) return reply.status(400).send('Invalid request');
+    if (!params.success) return reply.status(400).send({ error: 'Invalid request' });
 
     const paymentId = params.data.id;
     const [payment] = db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).all();
-    if (!payment) return reply.status(404).send('Payment not found');
+    if (!payment) return reply.status(404).send({ error: 'Payment not found' });
 
     db.update(paymentsTable)
       .set({ verified: true, method: 'manual', paidAt: payment.paidAt || new Date() })
@@ -549,7 +583,44 @@ export async function adminRoutes(app: FastifyInstance) {
         .run();
     }
 
-    return { success: true };
+    return { success: true, message: 'Payment confirmed and session confirmed.' };
+  });
+
+  app.post('/api/admin/payments/:id/reject', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid request' });
+
+    const bodySchema = z.object({
+      reason: z.string().optional(),
+    }).optional();
+    const parsedBody = bodySchema.safeParse(req.body);
+    const reason = parsedBody.success && parsedBody.data?.reason ? parsedBody.data.reason : 'Payment rejected by administrator';
+
+    const paymentId = params.data.id;
+    const [payment] = db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).all();
+    if (!payment) return reply.status(404).send({ error: 'Payment not found' });
+
+    db.update(paymentsTable)
+      .set({
+        verified: false,
+        method: 'rejected',
+        rawResponseJson: JSON.stringify({
+          rejectedAt: new Date().toISOString(),
+          reason,
+        }),
+      })
+      .where(eq(paymentsTable.id, paymentId))
+      .run();
+
+    if (payment.sessionId) {
+      db.update(sessionsTable)
+        .set({ status: 'cancelled', holdExpiresAt: null })
+        .where(eq(sessionsTable.id, payment.sessionId))
+        .run();
+    }
+
+    return { success: true, message: 'Payment rejected and session slot cancelled.' };
   });
 
   app.get('/api/admin/money', async () => {
@@ -689,7 +760,7 @@ export async function adminRoutes(app: FastifyInstance) {
     .from(paymentsTable)
     .leftJoin(sessionsTable, eq(paymentsTable.sessionId, sessionsTable.id))
     .leftJoin(clientsTable, eq(sessionsTable.clientId, clientsTable.id))
-    .where(eq(paymentsTable.verified, false))
+    .where(and(eq(paymentsTable.verified, false), ne(paymentsTable.method, 'rejected')))
     .all()
     .map(p => ({
       id: p.payment.id,
@@ -707,7 +778,7 @@ export async function adminRoutes(app: FastifyInstance) {
       payment: paymentsTable,
     })
     .from(paymentsTable)
-    .where(isNull(paymentsTable.sessionId))
+    .where(and(isNull(paymentsTable.sessionId), eq(paymentsTable.verified, false), ne(paymentsTable.method, 'rejected')))
     .all()
     .map(p => ({
       id: p.payment.id,

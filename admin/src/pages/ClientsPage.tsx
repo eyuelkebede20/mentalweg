@@ -17,6 +17,7 @@ import {
   ShieldCheck, 
   AlertCircle
 } from 'lucide-react';
+import { PaymentReviewModal, type PaymentReviewDetails } from '../components/PaymentReviewModal';
 
 interface Client {
   id: number;
@@ -49,6 +50,7 @@ interface ClientDetail extends Client {
     method: string;
     paidAt: string;
     verified: boolean;
+    screenshotPath?: string;
   }>;
   changes: Array<{
     id: number;
@@ -80,6 +82,7 @@ export default function ClientsPage() {
   const [noteSaving, setNoteSaving] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [reviewPayment, setReviewPayment] = useState<PaymentReviewDetails | null>(null);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
@@ -174,28 +177,6 @@ export default function ClientsPage() {
     }
   };
 
-  const handleApprovePayment = async (paymentId: number) => {
-    try {
-      const res = await fetch(`/api/admin/payments/${paymentId}/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (res.ok) {
-        showToast('Payment approved & session confirmed!');
-        if (selectedClient) {
-          setSelectedClient({
-            ...selectedClient,
-            payments: selectedClient.payments.map(p => p.id === paymentId ? { ...p, verified: true } : p)
-          });
-        }
-      } else {
-        showToast('Failed to approve payment', 'error');
-      }
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    }
-  };
 
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -689,19 +670,32 @@ export default function ClientsPage() {
                         {!p.verified ? (
                           <button
                             type="button"
-                            onClick={() => handleApprovePayment(p.id)}
+                            onClick={() => setReviewPayment({
+                              id: p.id,
+                              provider: p.provider,
+                              reference: p.reference,
+                              amountCents: p.amountCents,
+                              paidAt: p.paidAt,
+                              screenshotPath: p.screenshotPath,
+                              client: {
+                                displayName: selectedClient.displayName,
+                                phoneE164: selectedClient.phoneE164,
+                                email: selectedClient.email,
+                                publicId: selectedClient.publicId,
+                              }
+                            })}
                             style={{
-                              background: '#16a34a',
+                              background: 'var(--acc)',
                               color: '#fff',
                               border: 'none',
-                              padding: '4px 8px',
+                              padding: '4px 10px',
                               borderRadius: '4px',
                               fontSize: '11px',
                               fontWeight: 600,
                               cursor: 'pointer',
                             }}
                           >
-                            Approve
+                            Review & Decide
                           </button>
                         ) : (
                           <span style={{ fontSize: '11px', color: '#165b38', fontWeight: 600 }}>Approved</span>
@@ -849,6 +843,30 @@ export default function ClientsPage() {
           </div>
         </div>
       )}
+      {/* PAYMENT REVIEW MODAL */}
+      <PaymentReviewModal
+        payment={reviewPayment}
+        isOpen={Boolean(reviewPayment)}
+        onClose={() => setReviewPayment(null)}
+        onPaymentConfirmed={(paymentId) => {
+          showToast('Payment approved & session confirmed!');
+          if (selectedClient) {
+            setSelectedClient({
+              ...selectedClient,
+              payments: selectedClient.payments.map(p => p.id === paymentId ? { ...p, verified: true } : p)
+            });
+          }
+        }}
+        onPaymentRejected={(paymentId) => {
+          showToast('Payment rejected and session slot cancelled.');
+          if (selectedClient) {
+            setSelectedClient({
+              ...selectedClient,
+              payments: selectedClient.payments.map(p => p.id === paymentId ? { ...p, verified: false, method: 'rejected' } : p)
+            });
+          }
+        }}
+      />
     </div>
   );
 }
