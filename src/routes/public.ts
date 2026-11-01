@@ -16,7 +16,10 @@ import { getUploadsDir } from '../utils/paths';
 export async function publicRoutes(app: FastifyInstance) {
   
   // Public practice config for landing page & booking
-  app.get('/api/public/config', async () => {
+  app.get('/api/public/config', async (req, reply) => {
+    reply.header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+    reply.header('Pragma', 'no-cache');
+    reply.header('Expires', '0');
     const settings = await getSettings();
     return {
       practiceName: settings.practiceName,
@@ -161,23 +164,54 @@ export async function publicRoutes(app: FastifyInstance) {
     let finalStatus = 'awaiting_payment';
     let isPaymentVerified = false;
 
-    if (verifyRes.verified && verifyRes.amountCents !== undefined && verifyRes.amountCents >= expectedCents) {
-      finalStatus = 'confirmed';
+    // Extract exact transaction number, date, and verified money
+    const txNumber = (verifyRes.verified && verifyRes.transactionNumber ? verifyRes.transactionNumber : cleanReference).trim();
+    const txDate = verifyRes.verified && verifyRes.date ? new Date(verifyRes.date) : new Date();
+    const verifiedAmountCents = typeof verifyRes.amountCents === 'number' ? verifyRes.amountCents : 0;
+    const receiverAccount = verifyRes.receiverAccount || currentAccount?.accountNumber || null;
+    const rawResponseJson = JSON.stringify(verifyRes.raw || {});
+
+    // Check existing verified payments on this session (if any)
+    const existingVerifiedPayments = db.select()
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.sessionId, session.id), eq(paymentsTable.verified, true)))
+      .all();
+    const previousVerifiedCents = existingVerifiedPayments.reduce((sum, p) => sum + p.amountCents, 0);
+
+    let message = 'Your booking proof has been submitted and is pending verification.';
+
+    if (verifyRes.verified) {
       isPaymentVerified = true;
+      const totalVerifiedCents = previousVerifiedCents + verifiedAmountCents;
+
+      // 1. Check with the timely rate (hourly rate x duration x scheduling percent)
+      if (totalVerifiedCents >= expectedCents) {
+        finalStatus = 'confirmed';
+        message = 'Your booking is confirmed!';
+      } else {
+        // Partial payment: status stays awaiting_payment, hold remains alive
+        finalStatus = 'awaiting_payment';
+        const remainingCents = expectedCents - totalVerifiedCents;
+        message = `You have paid ${(totalVerifiedCents / 100).toFixed(0)} ETB of ${(expectedCents / 100).toFixed(0)} ETB (timely rate). Please transfer the remaining ${(remainingCents / 100).toFixed(0)} ETB to complete confirmation.`;
+      }
     } else {
       // Flag for manual review / receipt inspection by admin
       finalStatus = 'needs_review';
+      message = 'Your booking proof has been submitted and is pending verification.';
     }
 
-    // 6. Record payment in database
+    // 6. Record payment in database: transaction number, date, and verified money
     const [payment] = db.insert(paymentsTable).values({
       sessionId: session.id,
       provider,
-      reference: cleanReference,
-      amountCents: verifyRes.amountCents || expectedCents,
+      reference: txNumber,
+      amountCents: verifyRes.verified ? verifiedAmountCents : expectedCents,
+      receiverAccount,
+      paidAt: txDate,
       verified: isPaymentVerified,
       method: isPaymentVerified ? 'auto' : 'manual',
-      screenshotPath: screenshotPath,
+      rawResponseJson,
+      screenshotPath,
     }).returning().all();
 
     // 7. Update session status
@@ -194,11 +228,158 @@ export async function publicRoutes(app: FastifyInstance) {
       sessionId: session.id,
       status: finalStatus,
       clientPublicId: client.publicId,
-      message: finalStatus === 'confirmed' 
-        ? 'Your booking is confirmed!' 
-        : 'Your booking proof has been submitted and is pending verification.',
+      message,
       paymentId: payment.id,
       slotStartUtc: session.startUtc,
+      amountPaidEtb: (payment.amountCents / 100),
+      timelyRateEtb: (expectedCents / 100),
+      transactionNumber: txNumber,
+      transactionDate: txDate.toISOString(),
+    };
+  });
+
+  // Submit an additional or subsequent payment for an existing session (e.g. partial payment completion)
+  app.post('/api/public/booking/:id/payment', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid session ID' });
+
+    const schema = z.object({
+      provider: z.string().min(1, 'Payment provider is required'),
+      reference: z.string().min(1, 'Payment reference is required').max(100),
+      phoneNumber: z.string().optional(),
+      screenshotBase64: z.string().optional(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.issues[0]?.message || 'Invalid input' });
+    }
+
+    const sessionId = params.data.id;
+    const [session] = db.select().from(sessionsTable).where(eq(sessionsTable.id, sessionId)).all();
+    if (!session) return reply.status(404).send({ error: 'Session not found' });
+
+    if (session.status === 'cancelled' || session.status === 'expired') {
+      return reply.status(400).send({ error: 'This session hold has expired or been cancelled. Please book a new slot.' });
+    }
+
+    const [client] = db.select().from(clientsTable).where(eq(clientsTable.id, session.clientId)).all();
+
+    const { provider, reference, phoneNumber, screenshotBase64 } = parsed.data;
+    const cleanReference = sanitizeText(reference);
+    if (!cleanReference) return reply.status(400).send({ error: 'Invalid reference' });
+
+    // Replay protection
+    const existing = db.select().from(paymentsTable).where(
+      and(eq(paymentsTable.provider, provider), eq(paymentsTable.reference, cleanReference))
+    ).limit(1).all();
+    if (existing.length > 0) {
+      return reply.status(400).send({ error: 'This payment reference has already been submitted.' });
+    }
+
+    // Screenshot handling
+    let screenshotPath: string | undefined = undefined;
+    if (screenshotBase64 && screenshotBase64.startsWith('data:image/')) {
+      try {
+        const matches = screenshotBase64.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+        if (matches) {
+          const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+          const buffer = Buffer.from(matches[2], 'base64');
+          const uploadsDir = getUploadsDir();
+          const filename = `receipt_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+          fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+          screenshotPath = `/uploads/${filename}`;
+        }
+      } catch (err) {
+        console.error('Failed to save receipt image:', err);
+      }
+    }
+
+    const settings = await getSettings();
+    const expectedCents = session.feeDueCents;
+    const currentAccount = (settings.paymentAccounts || []).find(a => a.provider.toLowerCase() === provider.toLowerCase());
+    const accountDigits = currentAccount?.accountNumber ? currentAccount.accountNumber.replace(/\D/g, '') : '';
+    const suffix = provider.toLowerCase() === 'cbe' ? accountDigits.slice(-8) : accountDigits.slice(-5);
+
+    let verifyRes: any = { verified: false, amountCents: 0 };
+    try {
+      verifyRes = await verifyReceipt(provider, cleanReference, {
+        screenshotPath,
+        suffix: suffix || undefined,
+        phoneNumber: phoneNumber || client?.phoneE164,
+        receiverAccount: currentAccount?.accountNumber,
+        receiverName: currentAccount?.holderName,
+      });
+    } catch {
+      verifyRes = { verified: false, amountCents: 0 };
+    }
+
+    const txNumber = (verifyRes.verified && verifyRes.transactionNumber ? verifyRes.transactionNumber : cleanReference).trim();
+    const txDate = verifyRes.verified && verifyRes.date ? new Date(verifyRes.date) : new Date();
+    const verifiedAmountCents = typeof verifyRes.amountCents === 'number' ? verifyRes.amountCents : 0;
+    const receiverAccount = verifyRes.receiverAccount || currentAccount?.accountNumber || null;
+    const rawResponseJson = JSON.stringify(verifyRes.raw || {});
+
+    const existingVerifiedPayments = db.select()
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.sessionId, session.id), eq(paymentsTable.verified, true)))
+      .all();
+    const previousVerifiedCents = existingVerifiedPayments.reduce((sum, p) => sum + p.amountCents, 0);
+
+    let finalStatus = session.status;
+    let isPaymentVerified = false;
+    let message = 'Your payment proof has been submitted and is pending verification.';
+
+    if (verifyRes.verified) {
+      isPaymentVerified = true;
+      const totalVerifiedCents = previousVerifiedCents + verifiedAmountCents;
+
+      // 1. Check with timely rate
+      if (totalVerifiedCents >= expectedCents) {
+        finalStatus = 'confirmed';
+        message = 'Your booking is confirmed!';
+      } else {
+        finalStatus = 'awaiting_payment';
+        const remainingCents = expectedCents - totalVerifiedCents;
+        message = `You have paid ${(totalVerifiedCents / 100).toFixed(0)} ETB of ${(expectedCents / 100).toFixed(0)} ETB (timely rate). Please transfer the remaining ${(remainingCents / 100).toFixed(0)} ETB to complete your confirmation.`;
+      }
+    } else {
+      finalStatus = 'needs_review';
+    }
+
+    const [payment] = db.insert(paymentsTable).values({
+      sessionId: session.id,
+      provider,
+      reference: txNumber,
+      amountCents: verifyRes.verified ? verifiedAmountCents : expectedCents,
+      receiverAccount,
+      paidAt: txDate,
+      verified: isPaymentVerified,
+      method: isPaymentVerified ? 'auto' : 'manual',
+      rawResponseJson,
+      screenshotPath,
+    }).returning().all();
+
+    db.update(sessionsTable)
+      .set({
+        status: finalStatus,
+        holdExpiresAt: finalStatus === 'confirmed' ? null : session.holdExpiresAt,
+      })
+      .where(eq(sessionsTable.id, session.id))
+      .run();
+
+    return {
+      success: true,
+      sessionId: session.id,
+      status: finalStatus,
+      clientPublicId: client?.publicId,
+      message,
+      paymentId: payment.id,
+      amountPaidEtb: (payment.amountCents / 100),
+      timelyRateEtb: (expectedCents / 100),
+      transactionNumber: txNumber,
+      transactionDate: txDate.toISOString(),
     };
   });
 

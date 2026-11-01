@@ -51,20 +51,6 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/admin/, /^\/amdin/, /^\/api/, /^\/auth/, /^\/uploads/],
         runtimeCaching: [
           {
-            urlPattern: ({ url }: { url: URL }) => url.pathname === '/api/public/config',
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'mw-practice-config-cache',
-              cacheableResponse: {
-                statuses: [0, 200]
-              },
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 // 24 hours
-              }
-            }
-          },
-          {
             urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/uploads/'),
             handler: 'StaleWhileRevalidate',
             options: {

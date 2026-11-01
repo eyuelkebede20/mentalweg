@@ -110,10 +110,10 @@ export const SettingsSchema = z.object({
 export type Settings = z.infer<typeof SettingsSchema>;
 
 export async function getSettings(): Promise<Settings> {
-  const row = await db.select().from(settingsTable).limit(1);
+  const row = db.select().from(settingsTable).limit(1).all();
   if (!row.length) {
     const defaults = SettingsSchema.parse({});
-    await db.insert(settingsTable).values({ data: defaults });
+    db.insert(settingsTable).values({ data: defaults }).run();
     return defaults;
   }
   try {
@@ -144,11 +144,11 @@ export async function updateSettings(data: Partial<Settings>): Promise<Settings>
 
   const valid = SettingsSchema.parse(updated);
   
-  const existing = await db.select().from(settingsTable).limit(1);
+  const existing = db.select().from(settingsTable).limit(1).all();
   if (!existing.length) {
-    await db.insert(settingsTable).values({ data: valid });
+    db.insert(settingsTable).values({ data: valid }).run();
   } else {
-    await db.update(settingsTable).set({ data: valid }).where(eq(settingsTable.id, existing[0].id));
+    db.update(settingsTable).set({ data: valid }).where(eq(settingsTable.id, existing[0].id)).run();
   }
   
   return valid;

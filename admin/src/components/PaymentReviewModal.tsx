@@ -14,7 +14,8 @@ import {
   Phone, 
   Mail, 
   FileText,
-  Maximize2
+  Maximize2,
+  RefreshCw
 } from 'lucide-react';
 
 export interface PaymentReviewDetails {
@@ -67,8 +68,9 @@ export function PaymentReviewModal({
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectReason, setRejectReason] = useState(REJECTION_REASONS[0]);
   const [customRejectNote, setCustomRejectNote] = useState('');
-  const [actionLoading, setActionLoading] = useState<'accept' | 'reject' | null>(null);
+  const [actionLoading, setActionLoading] = useState<'accept' | 'reject' | 'reverify' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reverifyFeedback, setReverifyFeedback] = useState<string | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
 
   if (!isOpen || !payment) return null;
@@ -77,6 +79,31 @@ export function PaymentReviewModal({
     navigator.clipboard.writeText(payment.reference);
     setCopiedRef(true);
     setTimeout(() => setCopiedRef(false), 2000);
+  };
+
+  const handleReverify = async () => {
+    try {
+      setActionLoading('reverify');
+      setErrorMessage(null);
+      setReverifyFeedback(null);
+      const res = await fetch(`/api/admin/payments/${payment.id}/reverify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.verified) {
+        throw new Error(data.message || data.error || 'Re-verification failed. Slip could not be verified automatically.');
+      }
+      setReverifyFeedback(data.message || 'Payment verified automatically via Verifier API!');
+      setTimeout(() => {
+        onPaymentConfirmed?.(payment.id);
+        onClose();
+      }, 1400);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error running automatic verification');
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleAccept = async () => {
@@ -231,6 +258,23 @@ export function PaymentReviewModal({
           </div>
         )}
 
+        {/* RE-VERIFY SUCCESS BANNER */}
+        {reverifyFeedback && (
+          <div style={{
+            padding: '10px 1.5rem',
+            background: '#ecfdf5',
+            borderBottom: '1px solid #a7f3d0',
+            color: '#065f46',
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{reverifyFeedback}</span>
+          </div>
+        )}
+
         {/* BODY */}
         <div style={{
           padding: '1.25rem 1.5rem',
@@ -317,7 +361,25 @@ export function PaymentReviewModal({
               {payment.paidAt && (
                 <div style={{ fontSize: '12px', color: 'var(--mut)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <Clock className="w-3.5 h-3.5" />
-                  Submitted: {new Date(payment.paidAt).toLocaleString('en-US', { timeZone: 'Africa/Addis_Ababa' })}
+                  Transaction Date: {new Date(payment.paidAt).toLocaleString('en-US', { timeZone: 'Africa/Addis_Ababa' })}
+                </div>
+              )}
+
+              {payment.session?.feeDueCents !== undefined && payment.session?.feeDueCents !== null && (
+                <div style={{ 
+                  fontSize: '12px', 
+                  marginTop: '8px', 
+                  padding: '6px 10px', 
+                  borderRadius: '6px', 
+                  background: payment.amountCents >= payment.session.feeDueCents ? '#ecfdf5' : '#fffbeb',
+                  color: payment.amountCents >= payment.session.feeDueCents ? '#065f46' : '#92400e',
+                  border: `1px solid ${payment.amountCents >= payment.session.feeDueCents ? '#a7f3d0' : '#fde68a'}`,
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                }}>
+                  <span>Timely Rate Required:</span>
+                  <strong>ETB {(payment.session.feeDueCents / 100).toFixed(2)}</strong>
                 </div>
               )}
             </div>
@@ -645,28 +707,53 @@ export function PaymentReviewModal({
             )}
 
             {!showRejectForm && (
-              <button
-                type="button"
-                onClick={handleAccept}
-                disabled={actionLoading !== null}
-                style={{
-                  padding: '8px 20px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'var(--acc)',
-                  color: '#fff',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 6px rgba(22, 91, 56, 0.25)',
-                }}
-              >
-                <CheckCircle className="w-4 h-4" />
-                {actionLoading === 'accept' ? 'Accepting...' : 'Accept & Confirm Payment'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleReverify}
+                  disabled={actionLoading !== null}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--line)',
+                    background: 'var(--card)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                  title="Query the verifier API directly to verify this receipt automatically"
+                >
+                  <RefreshCw className={`w-4 h-4 ${actionLoading === 'reverify' ? 'animate-spin' : ''}`} />
+                  {actionLoading === 'reverify' ? 'Verifying...' : 'Re-verify with API'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAccept}
+                  disabled={actionLoading !== null}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'var(--acc)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 6px rgba(22, 91, 56, 0.25)',
+                  }}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {actionLoading === 'accept' ? 'Accepting...' : 'Accept & Confirm Payment'}
+                </button>
+              </>
             )}
           </div>
         </div>

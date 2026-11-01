@@ -11,6 +11,9 @@ interface Props {
     status: string;
     feeEtb: number;
     message?: string;
+    transactionNumber?: string;
+    amountPaidEtb?: number;
+    timelyRateEtb?: number;
   };
   timeConvention: TimeConvention;
   locationText: string;
@@ -89,6 +92,20 @@ export default function BookingConfirmation({
             <span className="meta-label">Reference ID</span>
             <strong className="meta-value font-mono">{clientPublicId} (Session #{sessionId})</strong>
           </div>
+
+          {bookingResult.transactionNumber && (
+            <div className="meta-row">
+              <span className="meta-label">Txn Number</span>
+              <strong className="meta-value font-mono">{bookingResult.transactionNumber}</strong>
+            </div>
+          )}
+
+          {bookingResult.amountPaidEtb !== undefined && (
+            <div className="meta-row">
+              <span className="meta-label">Payment Amount</span>
+              <strong className="meta-value font-mono">ETB {bookingResult.amountPaidEtb.toFixed(2)}</strong>
+            </div>
+          )}
 
           <div className="meta-row">
             <span className="meta-label">Date</span>

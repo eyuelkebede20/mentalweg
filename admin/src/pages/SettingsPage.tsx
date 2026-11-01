@@ -707,6 +707,71 @@ export default function SettingsPage() {
                   />
                 </label>
               </div>
+
+              {/* Live Icon & Emblem Preview */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '10px', padding: '10px 14px', background: 'var(--off)', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                <div style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  background: 'var(--accbg)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  color: 'var(--acc)',
+                  border: '1px solid var(--line)',
+                  fontSize: '15px',
+                  flexShrink: 0
+                }}>
+                  {iconUrl ? (
+                    <img
+                      src={iconUrl.startsWith('/') ? iconUrl : `/${iconUrl}`}
+                      alt="Brand preview"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLElement).style.display = 'none';
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) parent.innerText = practiceName ? practiceName.trim().slice(0, 2).toUpperCase() : 'MW';
+                      }}
+                    />
+                  ) : (
+                    practiceName ? practiceName.trim().slice(0, 2).toUpperCase() : 'MW'
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
+                    {practiceName || 'Mentalweg Psychology Practice'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--mut)' }}>
+                    {iconUrl ? 'Custom Icon / Logo applied' : 'Fallback initials emblem active'}
+                  </div>
+                </div>
+                <a
+                  href="/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontSize: '12px',
+                    color: 'var(--acc)',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    background: 'var(--card)',
+                    border: '1px solid var(--line)',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Open public website in a new tab to see live changes"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Preview Main Page ↗</span>
+                </a>
+              </div>
             </div>
           </div>
 

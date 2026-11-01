@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import CalendarPage from './pages/CalendarPage';
 import TodayPage from './pages/TodayPage';
@@ -19,12 +19,27 @@ function Navigation() {
   const { accentColor } = useTheme();
   const { canInstall, promptInstall } = usePwaInstall();
   const [showIosTip, setShowIosTip] = useState(false);
+  const [pendingPatientsCount, setPendingPatientsCount] = useState(0);
+
+  useEffect(() => {
+    const fetchPending = () => {
+      fetch('/api/admin/patients/pending')
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data)) setPendingPatientsCount(data.length);
+        })
+        .catch(() => {});
+    };
+    fetchPending();
+    const interval = setInterval(fetchPending, 20000);
+    return () => clearInterval(interval);
+  }, [location.pathname]);
 
   const navItems = [
     { path: '/', label: 'Today', icon: Clock },
     { path: '/calendar', label: 'Calendar', icon: Calendar },
     { path: '/intake', label: 'New Patient', icon: UserPlus },
-    { path: '/clients', label: 'Clients', icon: Users },
+    { path: '/clients', label: 'Users & Patients', icon: Users, badge: pendingPatientsCount },
     { path: '/content', label: 'Resources', icon: BookOpen },
     { path: '/money', label: 'Money', icon: DollarSign },
     { path: '/settings', label: 'Settings', icon: SettingsIcon },
@@ -54,9 +69,23 @@ function Navigation() {
                   key={item.path}
                   to={item.path}
                   className={`nav-item-link ${active ? 'active' : ''}`}
+                  style={{ display: 'flex', alignItems: 'center' }}
                 >
                   <Icon className="w-4 h-4 mr-2.5" />
-                  <span>{item.label}</span>
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {Boolean(item.badge && item.badge > 0) && (
+                    <span style={{
+                      background: '#d97706',
+                      color: '#fff',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: '999px',
+                      lineHeight: '16px'
+                    }}>
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -141,8 +170,31 @@ function Navigation() {
               key={item.path}
               to={item.path}
               className={`mobile-nav-tab ${active ? 'active' : ''}`}
+              style={{ position: 'relative' }}
             >
-              <Icon className="w-5 h-5 mb-1" />
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <Icon className="w-5 h-5 mb-1" />
+                {Boolean(item.badge && item.badge > 0) && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-6px',
+                    background: '#d97706',
+                    color: '#fff',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    width: '15px',
+                    height: '15px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    lineHeight: 1
+                  }}>
+                    {item.badge}
+                  </span>
+                )}
+              </div>
               <span>{item.label}</span>
             </Link>
           );

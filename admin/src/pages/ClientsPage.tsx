@@ -15,7 +15,12 @@ import {
   Calendar as CalendarIcon, 
   CreditCard, 
   ShieldCheck, 
-  AlertCircle
+  AlertCircle,
+  Key,
+  Users,
+  UserCheck,
+  UserX,
+  Globe
 } from 'lucide-react';
 import { PaymentReviewModal, type PaymentReviewDetails } from '../components/PaymentReviewModal';
 
@@ -28,6 +33,8 @@ interface Client {
   isVerified: boolean;
   approvalStatus?: string;
   bookingToken?: string;
+  googleId?: string;
+  passwordHash?: string;
   note?: string;
   totalSessions: number;
   createdAt: string;
@@ -65,6 +72,7 @@ interface ClientDetail extends Client {
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState('');
+  const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'patients' | 'verified'>('all');
   const [loading, setLoading] = useState(true);
   
   // Add Client Modal
@@ -147,8 +155,29 @@ export default function ClientsPage() {
       if (res.ok) {
         showToast('Patient account approved & welcome email sent!');
         loadClients();
+        if (selectedClient && selectedClient.id === id) {
+          setSelectedClient({ ...selectedClient, approvalStatus: 'approved' });
+        }
       } else {
         showToast('Failed to approve patient', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const rejectPatient = async (id: number) => {
+    if (!confirm('Are you sure you want to decline / reject this patient account registration?')) return;
+    try {
+      const res = await fetch(`/api/admin/patients/${id}/reject`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Patient registration declined.');
+        loadClients();
+        if (selectedClient && selectedClient.id === id) {
+          setSelectedClient({ ...selectedClient, approvalStatus: 'rejected' });
+        }
+      } else {
+        showToast('Failed to decline patient registration', 'error');
       }
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -260,15 +289,47 @@ export default function ClientsPage() {
     showToast('Private client link copied to clipboard.');
   };
 
+  const pendingCount = clients.filter(c => c.approvalStatus === 'pending').length;
+  const portalPatientsCount = clients.filter(c => Boolean(c.passwordHash || c.googleId || c.approvalStatus === 'approved')).length;
+  const verifiedCount = clients.filter(c => c.isVerified).length;
+
   const filteredClients = clients.filter(c => {
     const query = search.toLowerCase();
-    return (
+    const matches = (
       c.displayName.toLowerCase().includes(query) ||
       c.phoneE164.includes(query) ||
       c.publicId.toLowerCase().includes(query) ||
       (c.email && c.email.toLowerCase().includes(query))
     );
+    if (!matches) return false;
+
+    if (filterTab === 'pending') return c.approvalStatus === 'pending';
+    if (filterTab === 'patients') return Boolean(c.passwordHash || c.googleId || c.approvalStatus === 'approved');
+    if (filterTab === 'verified') return c.isVerified;
+    return true;
   });
+
+  const getAuthBadge = (c: Client) => {
+    if (c.googleId) {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '2px 7px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+          <Globe className="w-3 h-3" /> Google
+        </span>
+      );
+    }
+    if (c.passwordHash) {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe', padding: '2px 7px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+          <Key className="w-3 h-3" /> Password
+        </span>
+      );
+    }
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'var(--off)', color: 'var(--mut)', border: '1px solid var(--line)', padding: '2px 7px', borderRadius: '4px', fontSize: '11px' }}>
+        Walk-in
+      </span>
+    );
+  };
 
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1050px', margin: '0 auto' }}>
@@ -296,11 +357,11 @@ export default function ClientsPage() {
       )}
 
       {/* Header */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '10px' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
         <div>
-          <h1 style={{ fontSize: '24px', margin: '0 0 6px', color: 'var(--ink)' }}>Client Directory</h1>
+          <h1 style={{ fontSize: '24px', margin: '0 0 6px', color: 'var(--ink)' }}>Users & Patients Management</h1>
           <p style={{ margin: 0, color: 'var(--mut)', fontSize: '14px' }}>
-            Manage client profiles, contact numbers, verified weekly client links, and appointment records.
+            Manage client profiles, patient account registrations, approval decisions, and verified portal access.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -344,12 +405,163 @@ export default function ClientsPage() {
         </div>
       </header>
 
+      {/* KPI Stats Overview Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '1.25rem' }}>
+        <div
+          onClick={() => setFilterTab('all')}
+          style={{
+            background: filterTab === 'all' ? 'var(--card)' : 'var(--off)',
+            border: `2px solid ${filterTab === 'all' ? 'var(--acc)' : 'var(--line)'}`,
+            padding: '12px 16px',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--mut)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Registered</div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>{clients.length}</div>
+          <div style={{ fontSize: '11px', color: 'var(--mut)', marginTop: '2px' }}>All users & intake records</div>
+        </div>
+
+        <div
+          onClick={() => setFilterTab('pending')}
+          style={{
+            background: filterTab === 'pending' ? '#fffbeb' : (pendingCount > 0 ? '#fffdf7' : 'var(--off)'),
+            border: `2px solid ${filterTab === 'pending' ? '#d97706' : (pendingCount > 0 ? '#fde68a' : 'var(--line)')}`,
+            padding: '12px 16px',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pending Approvals</span>
+            {pendingCount > 0 && (
+              <span style={{ background: '#d97706', color: '#fff', fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '999px' }}>Action Req.</span>
+            )}
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#b45309', marginTop: '4px' }}>{pendingCount}</div>
+          <div style={{ fontSize: '11px', color: '#92400e', marginTop: '2px' }}>{pendingCount === 1 ? '1 registration awaiting review' : `${pendingCount} registrations awaiting review`}</div>
+        </div>
+
+        <div
+          onClick={() => setFilterTab('patients')}
+          style={{
+            background: filterTab === 'patients' ? 'var(--card)' : 'var(--off)',
+            border: `2px solid ${filterTab === 'patients' ? 'var(--acc)' : 'var(--line)'}`,
+            padding: '12px 16px',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--mut)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Portal Patients</div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>{portalPatientsCount}</div>
+          <div style={{ fontSize: '11px', color: 'var(--mut)', marginTop: '2px' }}>With password or Google login</div>
+        </div>
+
+        <div
+          onClick={() => setFilterTab('verified')}
+          style={{
+            background: filterTab === 'verified' ? 'var(--card)' : 'var(--off)',
+            border: `2px solid ${filterTab === 'verified' ? 'var(--acc)' : 'var(--line)'}`,
+            padding: '12px 16px',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--mut)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Verified Clients</div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--ink)', marginTop: '4px' }}>{verifiedCount}</div>
+          <div style={{ fontSize: '11px', color: 'var(--mut)', marginTop: '2px' }}>With private weekly booking links</div>
+        </div>
+      </div>
+
+      {/* Segmented Filter Pills */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setFilterTab('all')}
+          style={{
+            background: filterTab === 'all' ? 'var(--acc)' : 'var(--card)',
+            color: filterTab === 'all' ? '#fff' : 'var(--ink)',
+            border: '1px solid var(--line)',
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <Users className="w-3.5 h-3.5" /> All Users ({clients.length})
+        </button>
+
+        <button
+          onClick={() => setFilterTab('pending')}
+          style={{
+            background: filterTab === 'pending' ? '#d97706' : (pendingCount > 0 ? '#fffbeb' : 'var(--card)'),
+            color: filterTab === 'pending' ? '#fff' : (pendingCount > 0 ? '#b45309' : 'var(--ink)'),
+            border: `1px solid ${pendingCount > 0 ? '#fed7aa' : 'var(--line)'}`,
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <AlertCircle className="w-3.5 h-3.5" /> Pending Approvals ({pendingCount})
+        </button>
+
+        <button
+          onClick={() => setFilterTab('patients')}
+          style={{
+            background: filterTab === 'patients' ? 'var(--acc)' : 'var(--card)',
+            color: filterTab === 'patients' ? '#fff' : 'var(--ink)',
+            border: '1px solid var(--line)',
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <Key className="w-3.5 h-3.5" /> Portal Patients ({portalPatientsCount})
+        </button>
+
+        <button
+          onClick={() => setFilterTab('verified')}
+          style={{
+            background: filterTab === 'verified' ? 'var(--acc)' : 'var(--card)',
+            color: filterTab === 'verified' ? '#fff' : 'var(--ink)',
+            border: '1px solid var(--line)',
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12.5px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" /> Verified Clients ({verifiedCount})
+        </button>
+      </div>
+
       {/* Search Input */}
-      <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
+      <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
         <Search className="w-4 h-4" style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--mut)', pointerEvents: 'none' }} />
         <input
           type="text"
-          placeholder="Search by client name, mobile phone (+251...), or Public ID (e.g. C-0001)..."
+          placeholder="Search by client/patient name, mobile phone (+251...), or Public ID (e.g. C-0001)..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="admin-input"
@@ -357,11 +569,11 @@ export default function ClientsPage() {
         />
       </div>
 
-      {loading && <p style={{ textAlign: 'center', color: 'var(--mut)', padding: '2rem' }}>Loading client directory...</p>}
+      {loading && <p style={{ textAlign: 'center', color: 'var(--mut)', padding: '2rem' }}>Loading user directory...</p>}
 
       {!loading && filteredClients.length === 0 && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--line)', padding: '3rem', textAlign: 'center', borderRadius: '12px' }}>
-          <p style={{ color: 'var(--mut)', margin: 0 }}>No clients found matching "{search}".</p>
+          <p style={{ color: 'var(--mut)', margin: 0 }}>No users found matching current filters.</p>
         </div>
       )}
 
@@ -372,10 +584,11 @@ export default function ClientsPage() {
             <thead>
               <tr style={{ background: 'var(--off)', borderBottom: '1px solid var(--line)', fontSize: '13px', color: 'var(--mut)' }}>
                 <th style={{ padding: '12px 16px' }}>Public ID</th>
-                <th style={{ padding: '12px 16px' }}>Client Name</th>
+                <th style={{ padding: '12px 16px' }}>User / Patient Name</th>
+                <th style={{ padding: '12px 16px' }}>Auth Method</th>
                 <th style={{ padding: '12px 16px' }}>Phone Number</th>
                 <th style={{ padding: '12px 16px' }}>Sessions</th>
-                <th style={{ padding: '12px 16px' }}>Verified Status</th>
+                <th style={{ padding: '12px 16px' }}>Account Status</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -397,6 +610,9 @@ export default function ClientsPage() {
                       </span>
                     )}
                   </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    {getAuthBadge(c)}
+                  </td>
                   <td style={{ padding: '14px 16px', fontFamily: 'monospace' }}>
                     {c.phoneE164}
                   </td>
@@ -408,7 +624,11 @@ export default function ClientsPage() {
                   <td style={{ padding: '14px 16px' }}>
                     {c.approvalStatus === 'pending' ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#b45309', background: '#fffbeb', border: '1px solid #fed7aa', padding: '3px 10px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700 }}>
-                        Pending Approval
+                        <AlertCircle className="w-3 h-3" /> Pending Approval
+                      </span>
+                    ) : c.approvalStatus === 'rejected' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', padding: '3px 10px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700 }}>
+                        <UserX className="w-3 h-3" /> Declined
                       </span>
                     ) : c.isVerified ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#165b38', background: '#e3f7ed', padding: '3px 10px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600 }}>
@@ -423,13 +643,23 @@ export default function ClientsPage() {
                   <td style={{ padding: '14px 16px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
                       {c.approvalStatus === 'pending' && (
-                        <button
-                          onClick={() => approvePatient(c.id)}
-                          className="btn-admin-primary"
-                          style={{ padding: '5px 12px', fontSize: '11.5px' }}
-                        >
-                          Approve
-                        </button>
+                        <>
+                          <button
+                            onClick={() => approvePatient(c.id)}
+                            className="btn-admin-primary"
+                            style={{ padding: '5px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            title="Approve patient account and send confirmation email"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" /> Approve
+                          </button>
+                          <button
+                            onClick={() => rejectPatient(c.id)}
+                            style={{ background: '#fff', border: '1px solid #f87171', color: '#dc2626', padding: '5px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                            title="Decline patient registration"
+                          >
+                            <UserX className="w-3.5 h-3.5" /> Decline
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => openClientDetail(c)}
@@ -469,10 +699,24 @@ export default function ClientsPage() {
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                   <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--acc)', fontSize: '14px' }}>
                     {selectedClient.publicId}
                   </span>
+                  {getAuthBadge(selectedClient)}
+                  {selectedClient.approvalStatus === 'pending' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: '#fffbeb', color: '#b45309', border: '1px solid #fed7aa', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                      <AlertCircle className="w-3 h-3" /> Awaiting Approval
+                    </span>
+                  ) : selectedClient.approvalStatus === 'rejected' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                      <UserX className="w-3 h-3" /> Declined
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600 }}>
+                      <Check className="w-3 h-3" /> Approved
+                    </span>
+                  )}
                   {selectedClient.isVerified && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#165b38', background: '#e3f7ed', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600 }}>
                       <ShieldCheck className="w-3.5 h-3.5" /> Verified Weekly Client
@@ -485,6 +729,48 @@ export default function ClientsPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Pending Registration Action Alert */}
+            {selectedClient.approvalStatus === 'pending' && (
+              <div style={{ background: '#fffbeb', border: '1px solid #fed7aa', borderRadius: '8px', padding: '14px', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <strong style={{ fontSize: '13px', color: '#92400e', display: 'block' }}>Pending Registration Review</strong>
+                  <span style={{ fontSize: '12px', color: '#b45309' }}>This patient has created an account and requested portal access. Approving sends a welcome email.</span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => approvePatient(selectedClient.id)}
+                    className="btn-admin-primary"
+                    style={{ padding: '6px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" /> Approve Account
+                  </button>
+                  <button
+                    onClick={() => rejectPatient(selectedClient.id)}
+                    style={{ background: '#fff', border: '1px solid #f87171', color: '#dc2626', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <UserX className="w-3.5 h-3.5" /> Decline
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Declined Alert */}
+            {selectedClient.approvalStatus === 'rejected' && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px 14px', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <strong style={{ fontSize: '13px', color: '#991b1b', display: 'block' }}>Patient Registration Declined</strong>
+                  <span style={{ fontSize: '12px', color: '#b91c1c' }}>This account is currently blocked from signing into the patient portal.</span>
+                </div>
+                <button
+                  onClick={() => approvePatient(selectedClient.id)}
+                  className="btn-admin-primary"
+                  style={{ padding: '5px 12px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <UserCheck className="w-3.5 h-3.5" /> Re-Approve Account
+                </button>
+              </div>
+            )}
 
             {/* Quick Contact Bar */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '1.5rem', background: 'var(--off)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)' }}>

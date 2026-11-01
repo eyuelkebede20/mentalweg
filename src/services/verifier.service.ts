@@ -4,6 +4,7 @@ import { getSettings } from './settings.service';
 export interface VerifyResult {
   verified: boolean;
   amountCents?: number;
+  transactionNumber?: string;
   receiverAccount?: string;
   receiverName?: string;
   date?: string;
@@ -35,7 +36,8 @@ export async function verifyReceipt(
   if (trimmedRef.toUpperCase().startsWith('TEST') || trimmedRef.toUpperCase().startsWith('MOCK')) {
     return {
       verified: true,
-      amountCents: 50000, // 500 ETB
+      amountCents: 30000, // 300 ETB (matches default scheduling fee rate)
+      transactionNumber: trimmedRef,
       receiverAccount: options.receiverAccount || '1000234567891',
       receiverName: options.receiverName || 'Dr. Hana Almaz',
       date: new Date().toISOString(),
@@ -185,14 +187,24 @@ function parseVerifierResponse(data: any): VerifyResult {
 
   const receiverAccount = details.receiverAccount || details.creditedPartyAccountNo || details.creditAccountNo || details.creditAccount;
   const receiverName = details.receiver || details.receiverName || details.creditedPartyName;
-  const date = details.date || details.paymentDate || details.transactionDate;
+  const rawDate = details.date || details.paymentDate || details.transactionDate || details.dateTime || details.timestamp || data.date || data.transactionDate;
+  const transactionNumber = details.transactionId || details.transactionNumber || details.transNo || details.reference || details.receiptNumber || details.txnId || data.transactionId || data.reference;
+
+  let parsedDateIso = new Date().toISOString();
+  if (rawDate) {
+    const parsed = new Date(rawDate);
+    if (!isNaN(parsed.getTime())) {
+      parsedDateIso = parsed.toISOString();
+    }
+  }
 
   return {
     verified: true,
     amountCents,
+    transactionNumber: transactionNumber ? String(transactionNumber).trim() : undefined,
     receiverAccount,
     receiverName,
-    date: date ? new Date(date).toISOString() : new Date().toISOString(),
+    date: parsedDateIso,
     raw: data
   };
 }

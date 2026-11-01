@@ -16,7 +16,9 @@ import {
   Sun,
   FileText,
   Download,
-  FileDown
+  FileDown,
+  LogIn,
+  User
 } from 'lucide-react';
 import './LandingPage.css';
 import { useAppVersion } from './utils/useAppVersion';
@@ -59,7 +61,8 @@ interface Poster {
 
 interface PracticeConfig {
   practiceName: string;
-  iconUrl: string;
+  iconUrl?: string;
+  accentColor?: string;
   quote: string;
   quoteAuthor: string;
   bio: string;
@@ -75,6 +78,9 @@ interface Props {
   onBook: () => void;
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;
+  patientUser?: any | null;
+  onOpenLogin?: () => void;
+  onOpenPortal?: () => void;
 }
 
 interface StageInfo {
@@ -103,7 +109,15 @@ function formatFileSize(bytes: number): string {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-export default function LandingPage({ config, onBook, theme = 'light', onToggleTheme }: Props) {
+export default function LandingPage({ 
+  config, 
+  onBook, 
+  theme = 'light', 
+  onToggleTheme,
+  patientUser,
+  onOpenLogin,
+  onOpenPortal
+}: Props) {
   const [activeStep, setActiveStep] = useState<number>(0);
   const [scrollProgress, setScrollProgress] = useState<number>(0);
   const [scrollDirection, setScrollDirection] = useState<'down' | 'up'>('down');
@@ -378,7 +392,27 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
       {/* 2. FIXED TOP NAVIGATION BAR */}
       <header className="landing-navbar">
         <div className="nav-brand" onClick={() => goToStep(0)} role="button" tabIndex={0}>
-          <div className="brand-emblem">MW</div>
+          {config.iconUrl ? (
+            <img 
+              src={config.iconUrl.startsWith('/') ? config.iconUrl : `/${config.iconUrl}`} 
+              alt={config.practiceName || 'Logo'} 
+              className="brand-emblem brand-emblem-img"
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = 'none';
+                const parent = e.currentTarget.parentElement;
+                if (parent) {
+                  const fallback = parent.querySelector('.brand-emblem-fallback');
+                  if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                }
+              }}
+            />
+          ) : null}
+          <div 
+            className="brand-emblem brand-emblem-fallback" 
+            style={{ display: config.iconUrl ? 'none' : 'flex' }}
+          >
+            {config.practiceName ? config.practiceName.trim().slice(0, 2).toUpperCase() : 'MW'}
+          </div>
           <div className="brand-text">
             <span className="brand-name">{config.practiceName || 'Mentalweg'}</span>
             <span className="brand-sub">Psychology Practice · Addis Ababa</span>
@@ -386,6 +420,20 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
         </div>
 
         <div className="nav-right-cluster">
+          {/* Patient Portal / Login button */}
+          {(onOpenLogin || onOpenPortal) && (
+            <button
+              type="button"
+              className={`nav-portal-btn ${patientUser ? 'active' : ''}`}
+              onClick={patientUser ? onOpenPortal : onOpenLogin}
+              title={patientUser ? `Patient Portal (${patientUser.displayName || 'Account'})` : 'Sign in to Patient Portal'}
+              aria-label="Patient Portal"
+            >
+              {patientUser ? <User className="w-3.5 h-3.5" /> : <LogIn className="w-3.5 h-3.5" />}
+              <span>{patientUser ? (patientUser.displayName ? patientUser.displayName.split(' ')[0] : 'Portal') : 'Sign In'}</span>
+            </button>
+          )}
+
           {canInstall && (
             <button
               type="button"
@@ -468,6 +516,16 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
                 <Calendar className="w-5 h-5" />
                 <span>Book Now (1-Hour Session)</span>
               </button>
+              {(onOpenLogin || onOpenPortal) && (
+                <button
+                  type="button"
+                  className="btn-secondary-action"
+                  onClick={patientUser ? onOpenPortal : onOpenLogin}
+                >
+                  {patientUser ? <User className="w-4 h-4 text-emerald" /> : <LogIn className="w-4 h-4 text-emerald" />}
+                  <span>{patientUser ? 'My Patient Portal' : 'Patient Portal & Login'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-secondary-action"
@@ -935,6 +993,19 @@ export default function LandingPage({ config, onBook, theme = 'light', onToggleT
                 &copy; {CURRENT_YEAR} {config.practiceName || 'Mentalweg'}. Licensed Clinical Psychologist · Addis Ababa, Ethiopia.
               </p>
               <div className="footer-practitioner-row">
+                {(onOpenLogin || onOpenPortal) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={patientUser ? onOpenPortal : onOpenLogin}
+                      className="footer-practitioner-link"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', padding: 0 }}
+                    >
+                      Patient Portal ({patientUser ? 'My Account' : 'Sign In / Register'})
+                    </button>
+                    <span style={{ opacity: 0.4 }}>·</span>
+                  </>
+                )}
                 <a href="/admin/" className="footer-practitioner-link">
                   Practitioner Portal
                 </a>

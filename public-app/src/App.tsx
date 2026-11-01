@@ -82,31 +82,64 @@ export default function App() {
 
   const [verifiedToken, setVerifiedToken] = useState<string | null>(getVerifiedToken);
 
-  // Hidden Patient Portal detection: /patient, /patient/login, /patient/signup, /patient/reset, /portal
+  // Patient Portal detection: /patient, /patient/login, /patient/signup, /patient/reset, /portal, /login, /signin, /signup
   const isPatientPath = typeof window !== 'undefined' && (
-    window.location.pathname.startsWith('/patient') || window.location.pathname.startsWith('/portal')
+    window.location.pathname.startsWith('/patient') ||
+    window.location.pathname.startsWith('/portal') ||
+    window.location.pathname.startsWith('/login') ||
+    window.location.pathname.startsWith('/signin') ||
+    window.location.pathname.startsWith('/signup')
   );
 
   const [patientView, setPatientView] = useState<boolean>(isPatientPath);
   const [patientUser, setPatientUser] = useState<any | null>(null);
-  const [checkingPatientAuth, setCheckingPatientAuth] = useState<boolean>(isPatientPath);
+  const [checkingPatientAuth, setCheckingPatientAuth] = useState<boolean>(true);
 
+  // Check patient auth on mount so user state is known on the landing page as well as portal
   useEffect(() => {
-    if (patientView) {
-      setCheckingPatientAuth(true);
-      fetch('/api/patient/me')
-        .then(r => r.json())
-        .then(data => {
-          if (data && data.authenticated && data.client) {
-            setPatientUser(data.client);
-          } else {
-            setPatientUser(null);
-          }
-        })
-        .catch(() => setPatientUser(null))
-        .finally(() => setCheckingPatientAuth(false));
+    fetch('/api/patient/me')
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.authenticated && data.client) {
+          setPatientUser(data.client);
+        } else {
+          setPatientUser(null);
+        }
+      })
+      .catch(() => setPatientUser(null))
+      .finally(() => setCheckingPatientAuth(false));
+  }, []);
+
+  // Sync patientView if navigated via popstate (browser back/forward)
+  useEffect(() => {
+    const handlePopState = () => {
+      const isPatient = (
+        window.location.pathname.startsWith('/patient') ||
+        window.location.pathname.startsWith('/portal') ||
+        window.location.pathname.startsWith('/login') ||
+        window.location.pathname.startsWith('/signin') ||
+        window.location.pathname.startsWith('/signup')
+      );
+      setPatientView(isPatient);
+      setVerifiedToken(getVerifiedToken());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleOpenLogin = () => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/patient/login');
     }
-  }, [patientView]);
+    setPatientView(true);
+  };
+
+  const handleOpenPortal = () => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/patient');
+    }
+    setPatientView(true);
+  };
 
   const getPatientMode = (): 'login' | 'signup' | 'forgot' | 'reset' => {
     if (typeof window === 'undefined') return 'login';
@@ -122,13 +155,33 @@ export default function App() {
     return new URLSearchParams(window.location.search).get('token') || '';
   };
 
-  // Load practice config from API
+  // Load practice config from API with cache-busting to immediately reflect branding updates
   useEffect(() => {
-    fetch('/api/public/config')
+    fetch(`/api/public/config?_t=${Date.now()}`, { cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
         if (data && data.practiceName) {
           setConfig(data);
+
+          // Dynamically reflect practice name in document title
+          document.title = `${data.practiceName} · Clinical Psychology Practice`;
+
+          // Dynamically reflect icon in favicon
+          if (data.iconUrl) {
+            let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+            if (!link) {
+              link = document.createElement('link');
+              link.rel = 'icon';
+              document.head.appendChild(link);
+            }
+            link.href = data.iconUrl.startsWith('/') ? data.iconUrl : `/${data.iconUrl}`;
+          }
+
+          // Apply accentColor if specified
+          if (data.accentColor) {
+            document.documentElement.style.setProperty('--forest-800', data.accentColor);
+            document.documentElement.style.setProperty('--primary', data.accentColor);
+          }
         }
       })
       .catch(err => {
@@ -254,6 +307,9 @@ export default function App() {
           onBook={handleStartBooking}
           theme={theme}
           onToggleTheme={toggleTheme}
+          patientUser={patientUser}
+          onOpenLogin={handleOpenLogin}
+          onOpenPortal={handleOpenPortal}
         />
       )}
 
@@ -272,7 +328,28 @@ export default function App() {
               tabIndex={0}
               title="Return to Practice Sanctuary"
             >
-              <div className="brand-emblem">MW</div>
+              {config.iconUrl ? (
+                <img
+                  src={config.iconUrl.startsWith('/') ? config.iconUrl : `/${config.iconUrl}`}
+                  alt={config.practiceName || 'Logo'}
+                  className="brand-emblem brand-emblem-img"
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                    const parent = e.currentTarget.parentElement;
+                    if (parent) {
+                      const fallback = parent.querySelector('.brand-emblem-fallback');
+                      if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                    }
+                  }}
+                />
+              ) : null}
+              <div
+                className="brand-emblem brand-emblem-fallback"
+                style={{ display: config.iconUrl ? 'none' : 'flex' }}
+              >
+                {config.practiceName ? config.practiceName.trim().slice(0, 2).toUpperCase() : 'MW'}
+              </div>
               <div className="brand-text">
                 <span className="brand-name">{config.practiceName || 'Mentalweg'}</span>
                 <span className="brand-sub">Addis Ababa · In-Person Therapy</span>

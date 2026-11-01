@@ -18,6 +18,7 @@ import { eq, and, ne, gte, lt, lte, desc, isNull, sql } from 'drizzle-orm';
 import { getSettings, updateSettings } from '../services/settings.service';
 import { sanitizeText, sanitizeEmail, normalizeEthiopianPhone } from '../utils/sanitize';
 import { sendEmail, sendPatientApprovalEmail } from '../services/email.service';
+import { verifyReceipt } from '../services/verifier.service';
 import { env } from '../env';
 import { seedHolidays } from '../db/seedHolidays';
 import fs from 'fs';
@@ -559,6 +560,103 @@ export async function adminRoutes(app: FastifyInstance) {
       method: row.payment.method,
       session: row.session,
       client: row.client,
+    };
+  });
+
+  app.post('/api/admin/payments/:id/reverify', async (req, reply) => {
+    const paramsSchema = z.object({ id: z.coerce.number().int() });
+    const params = paramsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid request' });
+
+    const paymentId = params.data.id;
+    const [row] = db.select({
+      payment: paymentsTable,
+      session: sessionsTable,
+      client: clientsTable,
+    })
+    .from(paymentsTable)
+    .leftJoin(sessionsTable, eq(paymentsTable.sessionId, sessionsTable.id))
+    .leftJoin(clientsTable, eq(sessionsTable.clientId, clientsTable.id))
+    .where(eq(paymentsTable.id, paymentId))
+    .all();
+
+    if (!row) return reply.status(404).send({ error: 'Payment not found' });
+
+    const settings = await getSettings();
+    const currentAccount = (settings.paymentAccounts || []).find(a => a.provider.toLowerCase() === row.payment.provider.toLowerCase());
+    const accountDigits = currentAccount?.accountNumber ? currentAccount.accountNumber.replace(/\D/g, '') : '';
+    const suffix = row.payment.provider.toLowerCase() === 'cbe' ? accountDigits.slice(-8) : accountDigits.slice(-5);
+
+    let verifyRes;
+    try {
+      verifyRes = await verifyReceipt(row.payment.provider, row.payment.reference, {
+        screenshotPath: row.payment.screenshotPath || undefined,
+        suffix: suffix || undefined,
+        phoneNumber: row.client?.phoneE164,
+        receiverAccount: currentAccount?.accountNumber,
+        receiverName: currentAccount?.holderName,
+      });
+    } catch (e: any) {
+      return reply.status(500).send({ error: e.message || 'Verifier service request failed' });
+    }
+
+    if (!verifyRes.verified) {
+      return reply.status(422).send({
+        verified: false,
+        message: 'Verifier did not confirm transaction: ' + (verifyRes.error || 'Slip/reference unverified'),
+        raw: verifyRes.raw,
+      });
+    }
+
+    // Extract transaction number, date, and verified money
+    const txNumber = (verifyRes.transactionNumber || row.payment.reference).trim();
+    const txDate = verifyRes.date ? new Date(verifyRes.date) : (row.payment.paidAt || new Date());
+    const verifiedAmountCents = typeof verifyRes.amountCents === 'number' ? verifyRes.amountCents : row.payment.amountCents;
+    const receiverAccount = verifyRes.receiverAccount || currentAccount?.accountNumber || row.payment.receiverAccount;
+    const rawResponseJson = JSON.stringify(verifyRes.raw || {});
+
+    // Update payment record with verified details
+    const [updatedPayment] = db.update(paymentsTable)
+      .set({
+        reference: txNumber,
+        amountCents: verifiedAmountCents,
+        paidAt: txDate,
+        receiverAccount,
+        verified: true,
+        method: 'auto',
+        rawResponseJson,
+      })
+      .where(eq(paymentsTable.id, paymentId))
+      .returning()
+      .all();
+
+    // Check with the timely rate if a session is attached
+    let sessionConfirmed = false;
+    if (row.session) {
+      const allVerified = db.select()
+        .from(paymentsTable)
+        .where(and(eq(paymentsTable.sessionId, row.session.id), eq(paymentsTable.verified, true)))
+        .all();
+      const totalPaidCents = allVerified.reduce((sum, p) => sum + p.amountCents, 0);
+
+      // Timely rate comparison
+      if (totalPaidCents >= row.session.feeDueCents) {
+        db.update(sessionsTable)
+          .set({ status: 'confirmed', holdExpiresAt: null })
+          .where(eq(sessionsTable.id, row.session.id))
+          .run();
+        sessionConfirmed = true;
+      }
+    }
+
+    return {
+      success: true,
+      verified: true,
+      message: sessionConfirmed 
+        ? 'Transaction verified successfully via API and appointment confirmed!' 
+        : 'Transaction verified successfully via API.',
+      payment: updatedPayment,
+      sessionConfirmed,
     };
   });
 

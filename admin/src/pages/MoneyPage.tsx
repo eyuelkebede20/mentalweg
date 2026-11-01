@@ -54,7 +54,7 @@ export default function MoneyPage() {
     if (!data || !data.payments.length) return;
     const headers = ['Date', 'Client Public ID', 'Client Name', 'Provider', 'Reference', 'Amount (ETB)', 'Method'];
     const rows = data.payments.map(p => [
-      new Date(p.paidAt).toISOString().slice(0, 10),
+      p.paidAt ? new Date(p.paidAt).toISOString().slice(0, 10) : '—',
       `"${p.clientPublicId}"`,
       `"${p.clientName}"`,
       p.provider.toUpperCase(),
@@ -87,8 +87,10 @@ export default function MoneyPage() {
   const maxDailyEtb = Math.max(...(data?.dailySeries.map(d => d.amountEtb) || [1]), 100);
 
   // Format date helper
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr?: string | null) => {
+    if (!dateStr) return '—';
     const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '—';
     if (useEthiopianDate) {
       return new Intl.DateTimeFormat('en-u-ca-ethiopic', { day: 'numeric', month: 'short' }).format(d);
     }
