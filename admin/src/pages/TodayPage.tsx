@@ -47,6 +47,15 @@ interface PendingPayment {
   amountCents: number;
   screenshotPath?: string;
   paidAt?: string;
+  timing?: {
+    receiptDate: string | null;
+    receiptDateFormatted: string;
+    timeAgoText: string;
+    elapsedMinutes: number | null;
+    elapsedHours: number | null;
+    isStale: boolean;
+    isFuture: boolean;
+  };
   session?: {
     id: number;
     startUtc: string;
@@ -187,6 +196,51 @@ export default function TodayPage() {
         fetchTodayData();
       } else {
         showToast('Failed to decline registration', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Quick Payment Actions for Today Page
+  const handleConfirmPaymentQuick = async (paymentId: number) => {
+    setActionLoading(paymentId);
+    try {
+      const res = await fetch(`/api/admin/payments/${paymentId}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok) {
+        showToast('Payment confirmed and booking finalized!');
+        fetchTodayData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Failed to confirm payment', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRejectPaymentQuick = async (paymentId: number) => {
+    if (!confirm('Are you sure you want to cancel this booking and reject the payment?')) return;
+    setActionLoading(paymentId);
+    try {
+      const res = await fetch(`/api/admin/payments/${paymentId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Stale/unverified payment rejected and booking cancelled by administrator' }),
+      });
+      if (res.ok) {
+        showToast('Payment rejected and booking slot cancelled.');
+        fetchTodayData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Failed to reject payment', 'error');
       }
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -467,16 +521,76 @@ export default function TodayPage() {
                       Session Slot: {new Date(p.session.startUtc).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Africa/Addis_Ababa' })} ({p.session.durationMin} min)
                     </div>
                   )}
+
+                  {/* Time of payment (Now - time on receipt) */}
+                  {p.timing && (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      marginTop: '6px',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      background: p.timing.isStale ? '#fee2e2' : '#f0fdf4',
+                      color: p.timing.isStale ? '#991b1b' : '#166534',
+                      border: `1px solid ${p.timing.isStale ? '#fca5a5' : '#bbf7d0'}`,
+                    }}>
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>Time of Payment: <strong>{p.timing.timeAgoText}</strong> ({p.timing.receiptDateFormatted})</span>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={() => handleRejectPaymentQuick(p.id)}
+                    disabled={actionLoading === p.id}
+                    style={{
+                      background: '#fff',
+                      border: '1px solid #fecaca',
+                      color: '#dc2626',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                    title="Cancel booking and reject unverified or stale payment"
+                  >
+                    {actionLoading === p.id ? 'Cancelling...' : 'Cancel Booking'}
+                  </button>
+
+                  <button
+                    onClick={() => handleConfirmPaymentQuick(p.id)}
+                    disabled={actionLoading === p.id}
+                    style={{
+                      background: '#ecfdf5',
+                      border: '1px solid #a7f3d0',
+                      color: '#065f46',
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="Accept payment and confirm booking"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {actionLoading === p.id ? 'Accepting...' : 'Accept'}
+                  </button>
+
                   <button
                     onClick={() => setReviewPayment(p)}
                     style={{
                       background: 'var(--acc)',
                       border: 'none',
                       color: '#fff',
-                      padding: '8px 16px',
+                      padding: '8px 14px',
                       borderRadius: '6px',
                       fontSize: '12px',
                       fontWeight: 700,
@@ -488,7 +602,7 @@ export default function TodayPage() {
                     }}
                   >
                     <Eye className="w-4 h-4" />
-                    Review & Decide
+                    Review Slip
                   </button>
                 </div>
               </div>

@@ -25,6 +25,15 @@ export interface PaymentReviewDetails {
   amountCents: number;
   paidAt?: string | null;
   screenshotPath?: string | null;
+  timing?: {
+    receiptDate: string | null;
+    receiptDateFormatted: string;
+    timeAgoText: string;
+    elapsedMinutes: number | null;
+    elapsedHours: number | null;
+    isStale: boolean;
+    isFuture: boolean;
+  } | null;
   client?: {
     displayName?: string | null;
     phoneE164?: string | null;
@@ -49,13 +58,64 @@ interface PaymentReviewModalProps {
 }
 
 const REJECTION_REASONS = [
+  'Stale / Old Receipt (payment time is too old for this booking)',
   'Payment not received on bank statement',
+  'Duplicate or already applied receipt',
   'Invalid or unverified reference code',
   'Amount transferred is incorrect',
-  'Duplicate or already applied receipt',
   'Counterfeit or altered screenshot',
   'Other (specify note below)',
 ];
+
+function getClientPaymentTiming(paidAt?: string | null, serverTiming?: any) {
+  if (serverTiming && serverTiming.timeAgoText && serverTiming.receiptDateFormatted) {
+    return serverTiming;
+  }
+  if (!paidAt) {
+    return {
+      receiptDateFormatted: 'Time not available',
+      timeAgoText: 'Unknown',
+      isStale: false,
+      isFuture: false,
+    };
+  }
+  const d = new Date(paidAt);
+  if (isNaN(d.getTime())) {
+    return {
+      receiptDateFormatted: 'Invalid date format',
+      timeAgoText: 'Unknown',
+      isStale: false,
+      isFuture: false,
+    };
+  }
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.round(diffMs / 60000);
+  const hrs = parseFloat((diffMs / 3600000).toFixed(1));
+  const isFuture = diffMs < -60000;
+  const isStale = hrs > 24;
+
+  let timeAgoText = '';
+  if (isFuture) timeAgoText = 'Post-dated timestamp';
+  else if (mins < 1) timeAgoText = 'Just now (< 1 min ago)';
+  else if (mins < 60) timeAgoText = `${mins} min${mins === 1 ? '' : 's'} ago`;
+  else if (hrs < 24) timeAgoText = `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
+  else timeAgoText = `${Math.floor(hrs / 24)} days ago`;
+
+  return {
+    receiptDateFormatted: d.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Africa/Addis_Ababa',
+    }),
+    timeAgoText,
+    isStale,
+    isFuture,
+  };
+}
 
 export function PaymentReviewModal({
   payment,
@@ -74,6 +134,8 @@ export function PaymentReviewModal({
   const [isZoomed, setIsZoomed] = useState(false);
 
   if (!isOpen || !payment) return null;
+
+  const timing = getClientPaymentTiming(payment.paidAt, payment.timing);
 
   const handleCopyReference = () => {
     navigator.clipboard.writeText(payment.reference);
@@ -358,12 +420,34 @@ export function PaymentReviewModal({
                 </button>
               </div>
 
-              {payment.paidAt && (
-                <div style={{ fontSize: '12px', color: 'var(--mut)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Clock className="w-3.5 h-3.5" />
-                  Transaction Date: {new Date(payment.paidAt).toLocaleString('en-US', { timeZone: 'Africa/Addis_Ababa' })}
+              {/* Time of Payment (Now - Time on Receipt) */}
+              <div style={{
+                marginTop: '10px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: timing.isStale ? '#fef2f2' : '#f0fdf4',
+                border: `1px solid ${timing.isStale ? '#fecaca' : '#bbf7d0'}`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Clock className="w-4 h-4 text-mut" /> Time of Payment:
+                  </span>
+                  <strong style={{ fontSize: '13px', color: timing.isStale ? '#b91c1c' : '#15803d' }}>
+                    {timing.timeAgoText}
+                  </strong>
                 </div>
-              )}
+
+                <div style={{ fontSize: '11px', color: 'var(--mut)', marginTop: '4px' }}>
+                  Time on receipt: <strong>{timing.receiptDateFormatted}</strong>
+                </div>
+
+                {timing.isStale && (
+                  <div style={{ marginTop: '6px', fontSize: '11px', fontWeight: 600, color: '#dc2626', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    Warning: Receipt is {timing.timeAgoText}. Verify whether this payment was made for this specific booking.
+                  </div>
+                )}
+              </div>
 
               {payment.session?.feeDueCents !== undefined && payment.session?.feeDueCents !== null && (
                 <div style={{ 
@@ -662,7 +746,7 @@ export function PaymentReviewModal({
                   gap: '6px',
                 }}
               >
-                <XCircle className="w-4 h-4" /> Reject Payment
+                <XCircle className="w-4 h-4" /> Cancel Booking & Reject
               </button>
             ) : (
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -751,7 +835,7 @@ export function PaymentReviewModal({
                   }}
                 >
                   <CheckCircle className="w-4 h-4" />
-                  {actionLoading === 'accept' ? 'Accepting...' : 'Accept & Confirm Payment'}
+                  {actionLoading === 'accept' ? 'Accepting...' : 'Accept Payment & Confirm Booking'}
                 </button>
               </>
             )}

@@ -75,7 +75,8 @@ export default function BookingConfirmation({
         </div>
 
         <span className="status-badge-chip">
-          {isConfirmed ? 'Appointment Confirmed' : 'Payment Submitted & Under Review'}
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{isConfirmed ? 'Appointment Confirmed' : 'Payment Submitted & Under Review'}</span>
         </span>
 
         <h2>
@@ -166,9 +167,9 @@ export default function BookingConfirmation({
         <div className="confirmation-actions">
           <button type="button" className="btn-calendar-download" onClick={handleDownloadIcs}>
             <Download className="w-4 h-4" />
-            <span>Add to Google / Apple Calendar (.ics)</span>
+            <span>Add to Calendar (.ics)</span>
           </button>
-          <button type="button" className="btn-primary" onClick={onDone}>
+          <button type="button" className="btn-primary btn-confirm-home" onClick={onDone}>
             <span>Return to Practice Home</span>
             <ArrowRight className="w-4 h-4" />
           </button>

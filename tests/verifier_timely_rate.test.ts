@@ -3,6 +3,7 @@ import { db } from '../src/db';
 import { sessionsTable, paymentsTable, clientsTable, settingsTable } from '../src/db/schema';
 import { getSettings } from '../src/services/settings.service';
 import { verifyReceipt } from '../src/services/verifier.service';
+import { checkDuplicateOrNearReference, calculatePaymentTiming } from '../src/utils/sanitize';
 import { eq, and } from 'drizzle-orm';
 
 describe('Payment Verifier & Timely Rate Verification Flow', () => {
@@ -136,5 +137,66 @@ describe('Payment Verifier & Timely Rate Verification Flow', () => {
     const [checkedSession] = db.select().from(sessionsTable).where(eq(sessionsTable.id, session.id)).all();
     expect(checkedSession.status).toBe('awaiting_payment');
     expect(session.feeDueCents - totalPaid).toBe(15000); // 150 ETB remaining
+  });
+
+  it('rejects near-duplicate references where an attacker just changes one letter', () => {
+    const existingReferences = [
+      'TB-9876543210',
+      'FT26305XYZ89',
+      'CBE-100029384756',
+    ];
+
+    // 1. Exact match (case insensitive & stripped whitespace/dashes)
+    const exact1 = checkDuplicateOrNearReference('TB-9876543210', existingReferences);
+    expect(exact1.isDuplicate).toBe(true);
+
+    const exact2 = checkDuplicateOrNearReference('tb9876543210', existingReferences);
+    expect(exact2.isDuplicate).toBe(true);
+
+    // 2. Changed just one letter/digit (Levenshtein distance = 1)
+    const oneLetterChanged = checkDuplicateOrNearReference('TB-9876543211', existingReferences);
+    expect(oneLetterChanged.isDuplicate).toBe(false);
+    expect(oneLetterChanged.isNearDuplicate).toBe(true);
+    expect(oneLetterChanged.matchedRef).toBe('TB-9876543210');
+
+    const oneLetterChanged2 = checkDuplicateOrNearReference('FT26305XYZ88', existingReferences);
+    expect(oneLetterChanged2.isNearDuplicate).toBe(true);
+    expect(oneLetterChanged2.matchedRef).toBe('FT26305XYZ89');
+
+    // 3. Changed two letters on a long reference
+    const twoLettersChanged = checkDuplicateOrNearReference('CBE-100029384799', existingReferences);
+    expect(twoLettersChanged.isNearDuplicate).toBe(true);
+
+    // 4. Completely different authentic reference
+    const completelyDifferent = checkDuplicateOrNearReference('DASHEN-5544332211', existingReferences);
+    expect(completelyDifferent.isDuplicate).toBe(false);
+    expect(completelyDifferent.isNearDuplicate).toBe(false);
+  });
+
+  it('accurately calculates time of payment (now - receipt time) and flags stale receipts', () => {
+    const now = Date.now();
+
+    // 1. Payment made 15 minutes ago
+    const fifteenMinsAgo = new Date(now - 15 * 60000);
+    const timing1 = calculatePaymentTiming(fifteenMinsAgo);
+    expect(timing1.timeAgoText).toBe('15 mins ago');
+    expect(timing1.elapsedMinutes).toBe(15);
+    expect(timing1.isStale).toBe(false);
+
+    // 2. Payment made 2 hours and 30 minutes ago
+    const twoHoursAgo = new Date(now - (2 * 3600000 + 30 * 60000));
+    const timing2 = calculatePaymentTiming(twoHoursAgo);
+    expect(timing2.timeAgoText).toBe('2h 30m ago');
+    expect(timing2.isStale).toBe(false);
+
+    // 3. Stale payment made 3 days ago (e.g. reused old receipt)
+    const threeDaysAgo = new Date(now - 3 * 24 * 3600000);
+    const timing3 = calculatePaymentTiming(threeDaysAgo);
+    expect(timing3.timeAgoText).toBe('3 days ago');
+    expect(timing3.isStale).toBe(true);
+
+    // 4. Formatted date is populated
+    expect(timing1.receiptDateFormatted).toBeDefined();
+    expect(timing1.receiptDate).toBe(fifteenMinsAgo.toISOString());
   });
 });

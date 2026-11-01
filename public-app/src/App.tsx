@@ -177,10 +177,10 @@ export default function App() {
             link.href = data.iconUrl.startsWith('/') ? data.iconUrl : `/${data.iconUrl}`;
           }
 
-          // Apply accentColor if specified
+          // Apply accentColor if specified without clobbering theme text tokens like --forest-800
           if (data.accentColor) {
-            document.documentElement.style.setProperty('--forest-800', data.accentColor);
             document.documentElement.style.setProperty('--primary', data.accentColor);
+            document.documentElement.style.setProperty('--btn-forest-top', data.accentColor);
           }
         }
       })

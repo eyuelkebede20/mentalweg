@@ -526,6 +526,7 @@ export async function adminRoutes(app: FastifyInstance) {
       amountCents: p.payment.amountCents,
       screenshotPath: p.payment.screenshotPath,
       paidAt: p.payment.paidAt,
+      timing: calculatePaymentTiming(p.payment.paidAt, p.payment.createdAt),
       session: p.session,
       client: p.client
     }));
@@ -556,6 +557,7 @@ export async function adminRoutes(app: FastifyInstance) {
       amountCents: row.payment.amountCents,
       screenshotPath: row.payment.screenshotPath,
       paidAt: row.payment.paidAt,
+      timing: calculatePaymentTiming(row.payment.paidAt, row.payment.createdAt),
       verified: row.payment.verified,
       method: row.payment.method,
       session: row.session,
@@ -867,6 +869,7 @@ export async function adminRoutes(app: FastifyInstance) {
       amountCents: p.payment.amountCents,
       screenshotPath: p.payment.screenshotPath,
       paidAt: p.payment.paidAt,
+      timing: calculatePaymentTiming(p.payment.paidAt, p.payment.createdAt),
       session: p.session,
       client: p.client,
     }));
