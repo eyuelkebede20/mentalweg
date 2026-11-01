@@ -16,7 +16,7 @@ import {
 } from '../db/schema';
 import { eq, and, ne, gte, lt, lte, desc, isNull, sql } from 'drizzle-orm';
 import { getSettings, updateSettings } from '../services/settings.service';
-import { sanitizeText, sanitizeEmail, normalizeEthiopianPhone } from '../utils/sanitize';
+import { sanitizeText, sanitizeEmail, normalizeEthiopianPhone, calculatePaymentTiming } from '../utils/sanitize';
 import { sendEmail, sendPatientApprovalEmail } from '../services/email.service';
 import { verifyReceipt } from '../services/verifier.service';
 import { env } from '../env';

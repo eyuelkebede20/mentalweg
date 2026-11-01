@@ -36,7 +36,15 @@ export async function getAvailableSlots(fromUtc: Date, toUtc: Date, durationMin:
       // status not cancelled/expired
     ));
     
-  const activeSessions = sessions.filter(s => !['cancelled', 'expired'].includes(s.status));
+  const nowTimestamp = now.getTime();
+  const activeSessions = sessions.filter(s => {
+    if (['cancelled', 'expired'].includes(s.status)) return false;
+    // Exclude holds that have expired past their hold window
+    if (s.status === 'held' && s.holdExpiresAt && new Date(s.holdExpiresAt).getTime() < nowTimestamp) {
+      return false;
+    }
+    return true;
+  });
 
   // Build free time intervals (very simplified approach for now: check every 30 mins)
   const slots: Slot[] = [];

@@ -68,21 +68,63 @@ export default function BookingPaymentForm({
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be under 5MB.');
+    if (file.size > 15 * 1024 * 1024) {
+      setError('Image must be under 15MB.');
       return;
     }
 
     setPreviewName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setScreenshotBase64(reader.result as string);
+
+    // Auto-compress and downscale image using Canvas to ensure fast upload and avoid payload limits
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      try {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const MAX_DIM = 1280;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          setScreenshotBase64(compressedBase64);
+        } else {
+          // Fallback to raw FileReader
+          const reader = new FileReader();
+          reader.onload = () => setScreenshotBase64(reader.result as string);
+          reader.readAsDataURL(file);
+        }
+      } catch {
+        const reader = new FileReader();
+        reader.onload = () => setScreenshotBase64(reader.result as string);
+        reader.readAsDataURL(file);
+      }
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      const reader = new FileReader();
+      reader.onload = () => setScreenshotBase64(reader.result as string);
+      reader.readAsDataURL(file);
+    };
+    img.src = objectUrl;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
 
     // Sanitize all inputs
@@ -128,9 +170,17 @@ export default function BookingPaymentForm({
         })
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `Booking request failed with status ${res.status}`);
+      }
+
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Booking request failed');
+        const errMsg = data.error || data.message || `Booking request failed (${res.status})`;
+        throw new Error(errMsg);
       }
 
       onSuccess({
@@ -142,6 +192,7 @@ export default function BookingPaymentForm({
       });
     } catch (err: any) {
       setError(err.message || 'An error occurred while confirming your booking.');
+      window.scrollTo({ top: 100, behavior: 'smooth' });
     } finally {
       setSubmitting(false);
     }

@@ -13,6 +13,7 @@ import { getUploadsDir } from './utils/paths';
 export async function buildApp() {
   const app = Fastify({
     logger: true,
+    bodyLimit: 15 * 1024 * 1024, // 15MB limit to allow receipt screenshots and base64 payloads
   });
 
   await app.register(fastifyCookie, {

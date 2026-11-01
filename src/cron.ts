@@ -11,6 +11,19 @@ export function startCronJobs() {
   // Run every minute
   cron.schedule('* * * * *', async () => {
     const now = new Date();
+
+    // Auto-expire outdated holds that were never confirmed
+    try {
+      db.update(sessionsTable)
+        .set({ status: 'expired' })
+        .where(and(
+          eq(sessionsTable.status, 'held'),
+          lt(sessionsTable.holdExpiresAt, now)
+        ))
+        .run();
+    } catch (err) {
+      console.error('[Cron] Failed to expire outdated holds:', err);
+    }
     
     // 4 hours before session
     const targetStart = addHours(now, 4);

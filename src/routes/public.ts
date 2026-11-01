@@ -7,7 +7,7 @@ import { getSettings } from '../services/settings.service';
 import { createHold } from '../services/hold.service';
 import { verifyReceipt } from '../services/verifier.service';
 import { getAvailableSlots } from '../services/slot.service';
-import { sanitizeText, sanitizeEmail, normalizeEthiopianPhone } from '../utils/sanitize';
+import { sanitizeText, sanitizeEmail, normalizeEthiopianPhone, checkDuplicateOrNearReference } from '../utils/sanitize';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -96,13 +96,23 @@ export async function publicRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Please provide a valid payment reference.' });
     }
 
-    // 2. Replay protection
-    const existingPayments = db.select().from(paymentsTable).where(
-      and(eq(paymentsTable.provider, provider), eq(paymentsTable.reference, cleanReference))
-    ).limit(1).all();
+    // 2. Replay & Near-Duplicate protection
+    const allExistingReferences = db.select({ reference: paymentsTable.reference })
+      .from(paymentsTable)
+      .where(eq(paymentsTable.provider, provider))
+      .all()
+      .map(p => p.reference);
 
-    if (existingPayments.length > 0) {
+    const dupCheck = checkDuplicateOrNearReference(cleanReference, allExistingReferences);
+
+    if (dupCheck.isDuplicate) {
       return reply.status(400).send({ error: 'This payment reference has already been submitted.' });
+    }
+
+    if (dupCheck.isNearDuplicate) {
+      return reply.status(400).send({ 
+        error: 'Invalid or duplicate reference. This reference is too similar to an already registered transaction (differing by only 1-2 characters). Please check your receipt.' 
+      });
     }
 
     // 3. Handle optional screenshot upload (base64 image)
@@ -159,6 +169,23 @@ export async function publicRoutes(app: FastifyInstance) {
     } catch (e) {
       // If verifier fails or network timeout, treat as unverified for manual review
       verifyRes = { verified: false, amountCents: 0 };
+    }
+
+    // Canonical transaction number duplicate check
+    if (verifyRes.verified && verifyRes.transactionNumber) {
+      const canonicalDup = checkDuplicateOrNearReference(verifyRes.transactionNumber, allExistingReferences);
+      if (canonicalDup.isDuplicate) {
+        db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).run();
+        return reply.status(400).send({ error: 'This payment transaction has already been registered on another booking.' });
+      }
+    }
+
+    // If verifier could not confirm transaction and no screenshot was uploaded, reject immediately
+    if (!verifyRes.verified && !screenshotPath) {
+      db.delete(sessionsTable).where(eq(sessionsTable.id, session.id)).run();
+      return reply.status(400).send({
+        error: 'The payment reference could not be verified automatically by the banking system. Please upload a clear receipt screenshot for manual verification, or check your reference number.'
+      });
     }
 
     let finalStatus = 'awaiting_payment';
@@ -270,12 +297,21 @@ export async function publicRoutes(app: FastifyInstance) {
     const cleanReference = sanitizeText(reference);
     if (!cleanReference) return reply.status(400).send({ error: 'Invalid reference' });
 
-    // Replay protection
-    const existing = db.select().from(paymentsTable).where(
-      and(eq(paymentsTable.provider, provider), eq(paymentsTable.reference, cleanReference))
-    ).limit(1).all();
-    if (existing.length > 0) {
+    // Replay & Near-Duplicate protection
+    const allExistingReferences = db.select({ reference: paymentsTable.reference })
+      .from(paymentsTable)
+      .where(eq(paymentsTable.provider, provider))
+      .all()
+      .map(p => p.reference);
+
+    const dupCheck = checkDuplicateOrNearReference(cleanReference, allExistingReferences);
+    if (dupCheck.isDuplicate) {
       return reply.status(400).send({ error: 'This payment reference has already been submitted.' });
+    }
+    if (dupCheck.isNearDuplicate) {
+      return reply.status(400).send({ 
+        error: 'Invalid or duplicate reference. This reference is too similar to an already registered transaction (differing by only 1-2 characters). Please check your receipt.' 
+      });
     }
 
     // Screenshot handling
@@ -313,6 +349,20 @@ export async function publicRoutes(app: FastifyInstance) {
       });
     } catch {
       verifyRes = { verified: false, amountCents: 0 };
+    }
+
+    // Canonical transaction number duplicate check
+    if (verifyRes.verified && verifyRes.transactionNumber) {
+      const canonicalDup = checkDuplicateOrNearReference(verifyRes.transactionNumber, allExistingReferences);
+      if (canonicalDup.isDuplicate) {
+        return reply.status(400).send({ error: 'This payment transaction has already been registered on another booking.' });
+      }
+    }
+
+    if (!verifyRes.verified && !screenshotPath) {
+      return reply.status(400).send({
+        error: 'The payment reference could not be verified automatically by the banking system. Please upload a clear receipt screenshot for manual verification, or check your reference number.'
+      });
     }
 
     const txNumber = (verifyRes.verified && verifyRes.transactionNumber ? verifyRes.transactionNumber : cleanReference).trim();

@@ -388,11 +388,11 @@ export async function patientRoutes(app: FastifyInstance) {
     };
   });
 
-  // 6. Current Session Check
+  // 6. Current Session Check (Returns authenticated: false with 200 OK if not logged in)
   app.get('/api/patient/me', async (req, reply) => {
     const session = getPatientFromSession(req);
     if (!session) {
-      return reply.status(401).send({ authenticated: false });
+      return reply.send({ authenticated: false });
     }
 
     const client = db.select().from(clientsTable).where(
@@ -400,7 +400,7 @@ export async function patientRoutes(app: FastifyInstance) {
     ).all()[0];
 
     if (!client) {
-      return reply.status(401).send({ authenticated: false });
+      return reply.send({ authenticated: false });
     }
 
     return {

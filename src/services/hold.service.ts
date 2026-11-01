@@ -33,8 +33,12 @@ export async function createHold(data: {
       )
     ).all();
 
-    // Precise overlap check
+    // Precise overlap check (ignoring any expired holds)
+    const now = new Date();
     const hasOverlap = overlaps.some(s => {
+      if (s.status === 'held' && s.holdExpiresAt && new Date(s.holdExpiresAt).getTime() < now.getTime()) {
+        return false;
+      }
       const sStart = s.startUtc;
       const sEnd = addMinutes(sStart, s.durationMin + settings.bufferMin);
       return (data.startUtc < sEnd && slotEnd > sStart);
@@ -66,7 +70,6 @@ export async function createHold(data: {
 
     // 3. Create session with hold status
     const feeDueCents = Math.round(settings.hourlyRateEtb * 100 * (data.durationMin / 60) * (settings.schedulingFeePercent / 100));
-    const now = new Date();
     const holdExpiresMax = addMinutes(now, settings.holdDurationMin);
     const holdExpiresAt = data.startUtc < holdExpiresMax ? data.startUtc : holdExpiresMax;
 
