@@ -91,3 +91,21 @@ flowchart LR
    - Swipe right to mark as completed.
 2. **Offline-First Patient Emergency Roster**:
    - Cache today's appointments and contact numbers in IndexedDB / ServiceWorker so the practitioner can access patient info even during internet dropouts.
+
+---
+
+### F. Implemented: Receipt Inspection & Payment Decision Modal (`PaymentReviewModal.tsx`)
+
+- **Problem Addressed**: Previously, clicking "Confirm Manually" immediately approved bookings without allowing the admin to inspect the receipt screenshot or cancel invalid payments.
+- **Solution Delivered**:
+  - Replaced ambiguous immediate buttons on [TodayPage.tsx](file:///D:/Apps/2019/mentalweg/admin/src/pages/TodayPage.tsx), [CalendarPage.tsx](file:///D:/Apps/2019/mentalweg/admin/src/pages/CalendarPage.tsx), and [ClientsPage.tsx](file:///D:/Apps/2019/mentalweg/admin/src/pages/ClientsPage.tsx) with **"Review & Decide"**.
+  - Opens [PaymentReviewModal.tsx](file:///D:/Apps/2019/mentalweg/admin/src/components/PaymentReviewModal.tsx) displaying:
+    - Client details (name, phone, email).
+    - Appointment time & date in EAT time.
+    - Transfer provider badge (Telebirr, CBE, Dashen, etc.) & amount.
+    - Reference code with 1-click clipboard copy.
+    - Receipt slip screenshot (with zoom-in and open full size in new tab). If no screenshot was uploaded, displays a clear placeholder note.
+    - **Accept & Confirm Payment** button: marks payment verified and confirms session.
+    - **Reject Payment & Cancel Slot** button: prompts for rejection reason, marks payment rejected, releases the session slot, and removes it from pending review queue.
+  - Backend API endpoints: `POST /api/admin/payments/:id/confirm` and `POST /api/admin/payments/:id/reject` in [src/routes/admin.ts](file:///D:/Apps/2019/mentalweg/src/routes/admin.ts).
+
