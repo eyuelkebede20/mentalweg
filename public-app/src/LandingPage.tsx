@@ -119,7 +119,6 @@ export default function LandingPage({
   onOpenPortal
 }: Props) {
   const [activeStep, setActiveStep] = useState<number>(0);
-  const [scrollProgress, setScrollProgress] = useState<number>(0);
   const [scrollDirection, setScrollDirection] = useState<'down' | 'up'>('down');
   const [activePosterTab, setActivePosterTab] = useState<'latest' | 'previous'>('latest');
   const [selectedPoster, setSelectedPoster] = useState<Poster | null>(null);
@@ -139,6 +138,80 @@ export default function LandingPage({
   const activeStepRef = useRef<number>(0);
   const selectedPosterRef = useRef<Poster | null>(null);
   const selectedPostRef = useRef<BlogPost | null>(null);
+  const scrollProgressBarRef = useRef<HTMLDivElement>(null);
+  const lastFocusedElRef = useRef<HTMLElement | null>(null);
+  const posterModalRef = useRef<HTMLDivElement>(null);
+  const articleModalRef = useRef<HTMLDivElement>(null);
+
+  const openPosterModal = (poster: Poster) => {
+    lastFocusedElRef.current = document.activeElement as HTMLElement;
+    setSelectedPoster(poster);
+  };
+
+  const closePosterModal = () => {
+    setSelectedPoster(null);
+    if (lastFocusedElRef.current) {
+      lastFocusedElRef.current.focus();
+    }
+  };
+
+  const openPostModal = (post: BlogPost) => {
+    lastFocusedElRef.current = document.activeElement as HTMLElement;
+    setSelectedPost(post);
+  };
+
+  const closePostModal = () => {
+    setSelectedPost(null);
+    if (lastFocusedElRef.current) {
+      lastFocusedElRef.current.focus();
+    }
+  };
+
+  const handleModalTrapKeyDown = (
+    e: React.KeyboardEvent,
+    modalRef: React.RefObject<HTMLDivElement | null>,
+    closeFn: () => void
+  ) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closeFn();
+      return;
+    }
+    if (e.key === 'Tab' && modalRef.current) {
+      const focusables = modalRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
+  // Trap initial focus on modal open
+  useEffect(() => {
+    if (selectedPoster && posterModalRef.current) {
+      const focusable = posterModalRef.current.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input, [tabindex]:not([tabindex="-1"])'
+      );
+      focusable?.focus();
+    }
+  }, [selectedPoster]);
+
+  useEffect(() => {
+    if (selectedPost && articleModalRef.current) {
+      const focusable = articleModalRef.current.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input, [tabindex]:not([tabindex="-1"])'
+      );
+      focusable?.focus();
+    }
+  }, [selectedPost]);
 
   // Keep refs in sync for event listeners
   useEffect(() => {
@@ -311,20 +384,29 @@ export default function LandingPage({
     return () => observer.disconnect();
   }, [posts.length, materials.length]);
 
-  // Passive scroll progress listener (updates top progress bar & direction)
+  // High-performance GPU-accelerated scroll progress listener
   useEffect(() => {
     let lastScrollY = window.scrollY;
+    let ticking = false;
 
     const handleScroll = () => {
-      const scrollY = window.scrollY;
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      if (maxScroll > 0) {
-        setScrollProgress(Math.min(1, Math.max(0, scrollY / maxScroll)));
-      }
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollY = window.scrollY;
+          const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+          if (maxScroll > 0 && scrollProgressBarRef.current) {
+            const progress = Math.min(1, Math.max(0, scrollY / maxScroll));
+            scrollProgressBarRef.current.style.transform = `scaleX(${progress})`;
+          }
 
-      if (Math.abs(scrollY - lastScrollY) > 8) {
-        setScrollDirection(scrollY > lastScrollY ? 'down' : 'up');
-        lastScrollY = scrollY;
+          if (Math.abs(scrollY - lastScrollY) > 16) {
+            const nextDir = scrollY > lastScrollY ? 'down' : 'up';
+            setScrollDirection(prev => (prev !== nextDir ? nextDir : prev));
+            lastScrollY = scrollY;
+          }
+          ticking = false;
+        });
+        ticking = true;
       }
     };
 
@@ -337,14 +419,14 @@ export default function LandingPage({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedPosterRef.current) {
         if (e.key === 'Escape') {
-          setSelectedPoster(null);
+          closePosterModal();
         }
         return;
       }
 
       if (selectedPostRef.current) {
         if (e.key === 'Escape') {
-          setSelectedPost(null);
+          closePostModal();
         }
         return;
       }
@@ -382,20 +464,27 @@ export default function LandingPage({
         <div className="ambient-texture-overlay" />
       </div>
 
-      {/* TOP SCROLL PROGRESS BAR */}
+      {/* TOP SCROLL PROGRESS BAR (GPU TRANSFORM DRIVEN) */}
       <div
+        ref={scrollProgressBarRef}
         className="scroll-progress-line"
-        style={{ width: `${Math.round(scrollProgress * 100)}%` }}
         aria-hidden="true"
       />
 
       {/* 2. FIXED TOP NAVIGATION BAR */}
       <header className="landing-navbar">
-        <div className="nav-brand" onClick={() => goToStep(0)} role="button" tabIndex={0}>
+        <button
+          type="button"
+          className="nav-brand"
+          onClick={() => goToStep(0)}
+          aria-label={`${config.practiceName || 'Mentalweg'} - Return to sanctuary top`}
+        >
           {config.iconUrl ? (
             <img 
               src={config.iconUrl.startsWith('/') ? config.iconUrl : `/${config.iconUrl}`} 
               alt={config.practiceName || 'Logo'} 
+              width={38}
+              height={38}
               className="brand-emblem brand-emblem-img"
               onError={(e) => {
                 (e.currentTarget as HTMLElement).style.display = 'none';
@@ -417,7 +506,7 @@ export default function LandingPage({
             <span className="brand-name">{config.practiceName || 'Mentalweg'}</span>
             <span className="brand-sub">Psychology Practice · Addis Ababa</span>
           </div>
-        </div>
+        </button>
 
         <div className="nav-right-cluster">
           {/* Patient Portal / Login button */}
@@ -479,7 +568,6 @@ export default function LandingPage({
           id="stage-pane-0"
           data-stage-index="0"
           className={`stage-pane stage-hero ${getStageClass(0)}`}
-          aria-hidden={activeStep !== 0}
         >
           <div className="stage-content-box allow-internal-scroll">
             <div className="stage-eyebrow-pill">
@@ -543,9 +631,9 @@ export default function LandingPage({
           id="stage-pane-1"
           data-stage-index="1"
           className={`stage-pane stage-quote ${getStageClass(1)}`}
-          aria-hidden={activeStep !== 1}
         >
           <div className="stage-content-box allow-internal-scroll">
+            <h2 className="sr-only">Clinical Ethos & Practitioner Voice</h2>
             <div className="quote-mark-icon" aria-hidden="true">
               <Quote className="w-10 h-10 text-emerald" />
             </div>
@@ -603,7 +691,6 @@ export default function LandingPage({
           id="stage-pane-2"
           data-stage-index="2"
           className={`stage-pane stage-posters ${getStageClass(2)}`}
-          aria-hidden={activeStep !== 2}
         >
           <div className="stage-content-box allow-internal-scroll posters-content-box">
             <div className="stage-header-centered">
@@ -648,10 +735,19 @@ export default function LandingPage({
                   <article
                     key={poster.id}
                     className="poster-card-compact"
-                    onClick={() => setSelectedPoster(poster)}
+                    onClick={() => openPosterModal(poster)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openPosterModal(poster);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View details for workshop: ${poster.title}`}
                   >
                     <div className="poster-thumb-wrap">
-                      <img src={poster.imageUrl} alt={poster.title} loading="lazy" />
+                      <img src={poster.imageUrl} alt={poster.title} loading="lazy" style={{ aspectRatio: '16/10' }} />
                       <span className={`poster-status-chip ${poster.category}`}>
                         {poster.category === 'latest' ? 'Upcoming' : 'Archive'}
                       </span>
@@ -660,7 +756,7 @@ export default function LandingPage({
                       <span className="poster-date-text">{poster.date}</span>
                       <h3 className="poster-title-text">{poster.title}</h3>
                       <p className="poster-excerpt-text">{poster.description}</p>
-                      <button type="button" className="poster-view-link">
+                      <button type="button" className="poster-view-link" tabIndex={-1} aria-hidden="true">
                         <Eye className="w-4 h-4" />
                         <span>View Details</span>
                       </button>
@@ -688,7 +784,6 @@ export default function LandingPage({
           id="stage-pane-3"
           data-stage-index="3"
           className={`stage-pane stage-articles ${getStageClass(3)}`}
-          aria-hidden={activeStep !== 3}
         >
           <div className="stage-content-box allow-internal-scroll articles-content-box">
             <div className="stage-header-centered">
@@ -729,7 +824,16 @@ export default function LandingPage({
                   <article
                     key={post.id}
                     className="article-card-interactive"
-                    onClick={() => setSelectedPost(post)}
+                    onClick={() => openPostModal(post)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openPostModal(post);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Read article: ${post.title}`}
                   >
                     <div className="article-card-header">
                       <span className="article-card-category">{post.category}</span>
@@ -747,7 +851,7 @@ export default function LandingPage({
                         <span className="author-avatar-dot" />
                         <span className="author-name-text">{post.authorName || 'Dr. Hana Almaz'}</span>
                       </div>
-                      <button type="button" className="article-read-btn">
+                      <button type="button" className="article-read-btn" tabIndex={-1} aria-hidden="true">
                         <span>Read Article</span>
                         <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
                       </button>
@@ -775,7 +879,6 @@ export default function LandingPage({
           id="stage-pane-4"
           data-stage-index="4"
           className={`stage-pane stage-materials ${getStageClass(4)}`}
-          aria-hidden={activeStep !== 4}
         >
           <div className="stage-content-box allow-internal-scroll materials-content-box">
             <div className="stage-header-centered">
@@ -865,7 +968,6 @@ export default function LandingPage({
           id="stage-pane-5"
           data-stage-index="5"
           className={`stage-pane stage-sanctuary ${getStageClass(5)}`}
-          aria-hidden={activeStep !== 5}
         >
           <div className="stage-content-box allow-internal-scroll">
             <div className="stage-header-centered">
@@ -942,7 +1044,6 @@ export default function LandingPage({
           id="stage-pane-6"
           data-stage-index="6"
           className={`stage-pane stage-support ${getStageClass(6)}`}
-          aria-hidden={activeStep !== 6}
         >
           <div className="stage-content-box allow-internal-scroll">
             <div className="stage-header-centered">
@@ -1099,23 +1200,26 @@ export default function LandingPage({
       {/* 7. POSTER DETAIL MODAL OVERLAY */}
       {selectedPoster && (
         <div
+          ref={posterModalRef}
           className="poster-modal-overlay"
-          onClick={() => setSelectedPoster(null)}
+          onClick={closePosterModal}
+          onKeyDown={(e) => handleModalTrapKeyDown(e, posterModalRef, closePosterModal)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="poster-modal-title"
+          tabIndex={-1}
         >
           <div className="poster-modal-card" onClick={e => e.stopPropagation()}>
             <button
               type="button"
               className="modal-close-btn"
-              onClick={() => setSelectedPoster(null)}
+              onClick={closePosterModal}
               aria-label="Close poster"
             >
               <X className="w-6 h-6" />
             </button>
             <div className="modal-img-wrap">
-              <img src={selectedPoster.imageUrl} alt={selectedPoster.title} />
+              <img src={selectedPoster.imageUrl} alt={selectedPoster.title} style={{ aspectRatio: '16/10' }} />
             </div>
             <div className="modal-content">
               <span className="modal-badge">{selectedPoster.category.toUpperCase()} · {selectedPoster.date}</span>
@@ -1126,7 +1230,7 @@ export default function LandingPage({
                   type="button"
                   className="btn-primary-action"
                   onClick={() => {
-                    setSelectedPoster(null);
+                    closePosterModal();
                     onBook();
                   }}
                 >
@@ -1141,11 +1245,14 @@ export default function LandingPage({
       {/* 8. ARTICLE READER MODAL OVERLAY */}
       {selectedPost && (
         <div
+          ref={articleModalRef}
           className="article-modal-overlay"
-          onClick={() => setSelectedPost(null)}
+          onClick={closePostModal}
+          onKeyDown={(e) => handleModalTrapKeyDown(e, articleModalRef, closePostModal)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="article-modal-title"
+          tabIndex={-1}
         >
           <div className="article-modal-card allow-internal-scroll" onClick={e => e.stopPropagation()}>
             <header className="article-modal-header">
@@ -1165,7 +1272,7 @@ export default function LandingPage({
               <button
                 type="button"
                 className="article-modal-close-btn"
-                onClick={() => setSelectedPost(null)}
+                onClick={closePostModal}
                 aria-label="Close article"
               >
                 <X className="w-5 h-5" />
@@ -1203,7 +1310,7 @@ export default function LandingPage({
                   type="button"
                   className="btn-primary-action"
                   onClick={() => {
-                    setSelectedPost(null);
+                    closePostModal();
                     onBook();
                   }}
                 >
@@ -1213,7 +1320,7 @@ export default function LandingPage({
                 <button
                   type="button"
                   className="btn-secondary-action"
-                  onClick={() => setSelectedPost(null)}
+                  onClick={closePostModal}
                 >
                   <span>Done Reading</span>
                 </button>
@@ -1231,8 +1338,8 @@ export default function LandingPage({
           <button
             type="button"
             onClick={() => setShowIosTip(false)}
-            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}
-            aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '10px', minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+            aria-label="Dismiss install notification"
           >
             <X className="w-4 h-4" />
           </button>
