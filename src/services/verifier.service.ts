@@ -1,4 +1,5 @@
 import { env } from '../env';
+import { getSettings } from './settings.service';
 
 export interface VerifyResult {
   verified: boolean;
@@ -55,8 +56,11 @@ export async function verifyReceipt(
     payload.phoneNumber = options.phoneNumber;
   }
 
-  // Determine candidate endpoints: prefer local verifier on 3001 if available, or configured BASE_URL
-  const primaryBaseUrl = env.VERIFIER_BASE_URL.replace(/\/+$/, '');
+  // Determine candidate endpoints: prefer dynamic settings first, then env, then localhost
+  const settings = await getSettings().catch(() => null);
+  const primaryBaseUrl = (settings?.verifierBaseUrl || env.VERIFIER_BASE_URL || 'https://verifier.senaycreatives.org').replace(/\/+$/, '');
+  const apiKey = (settings?.verifierApiKey || env.VERIFIER_API_KEY || '').trim();
+
   const candidateUrls = [primaryBaseUrl];
   if (!candidateUrls.includes('http://localhost:3001')) {
     candidateUrls.push('http://localhost:3001');
@@ -87,7 +91,7 @@ export async function verifyReceipt(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': env.VERIFIER_API_KEY
+          'x-api-key': apiKey
         },
         body: JSON.stringify(payload),
         signal: controller.signal
@@ -105,7 +109,7 @@ export async function verifyReceipt(
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'x-api-key': env.VERIFIER_API_KEY
+                'x-api-key': apiKey
               },
               body: JSON.stringify(payload),
               signal: fallbackController.signal

@@ -13,7 +13,15 @@ import {
   Flag,
   Palette,
   GitCommit,
-  Lock
+  Lock,
+  Key,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  Zap,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import VersionBadge from '../components/VersionBadge';
 import { useTheme } from '../context/ThemeContext';
@@ -53,7 +61,7 @@ function getLuminance(hex: string): number {
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'shift' | 'policies' | 'posters' | 'payments' | 'holidays' | 'system'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'shift' | 'policies' | 'posters' | 'payments' | 'verifier' | 'holidays' | 'system'>('profile');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -106,6 +114,13 @@ export default function SettingsPage() {
   // Payment Accounts
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
 
+  // Autonomous Verifier Integration
+  const [verifierBaseUrl, setVerifierBaseUrl] = useState("https://verifier.senaycreatives.org");
+  const [verifierApiKey, setVerifierApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testingVerifier, setTestingVerifier] = useState(false);
+  const [verifierTestResult, setVerifierTestResult] = useState<{ success: boolean; message: string; latencyMs?: number } | null>(null);
+
   // Holidays
   const [holidays, setHolidays] = useState<HolidayItem[]>([]);
   const [newHolidayDate, setNewHolidayDate] = useState('');
@@ -150,6 +165,8 @@ export default function SettingsPage() {
           if (data.workingHours) setWorkingHours(data.workingHours);
           if (data.trainingPosters) setPosters(data.trainingPosters);
           if (data.paymentAccounts) setAccounts(data.paymentAccounts);
+          if (data.verifierBaseUrl) setVerifierBaseUrl(data.verifierBaseUrl);
+          if (data.verifierApiKey) setVerifierApiKey(data.verifierApiKey);
         }
         if (Array.isArray(holis)) {
           setHolidays(holis);
@@ -190,6 +207,8 @@ export default function SettingsPage() {
         workingHours,
         trainingPosters: posters,
         paymentAccounts: accounts,
+        verifierBaseUrl,
+        verifierApiKey,
       };
 
       let res = await fetch('/api/admin/settings', {
@@ -217,6 +236,39 @@ export default function SettingsPage() {
       setErrorMessage(e.message || 'Network error while saving settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Test Verifier Microservice Connection
+  const handleTestVerifier = async () => {
+    setTestingVerifier(true);
+    setVerifierTestResult(null);
+    try {
+      const res = await fetch('/api/admin/verifier/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl: verifierBaseUrl, apiKey: verifierApiKey }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setVerifierTestResult({
+          success: true,
+          latencyMs: data.latencyMs,
+          message: `Connected! ${data.message} (${data.latencyMs}ms)`
+        });
+      } else {
+        setVerifierTestResult({
+          success: false,
+          message: data.error || 'Failed to authenticate with Verifier microservice'
+        });
+      }
+    } catch (err: any) {
+      setVerifierTestResult({
+        success: false,
+        message: 'Network error reaching MentalWeg backend: ' + err.message
+      });
+    } finally {
+      setTestingVerifier(false);
     }
   };
 
@@ -443,6 +495,24 @@ export default function SettingsPage() {
           }}
         >
           <CreditCard className="w-4 h-4" /> Payment Accounts ({accounts.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('verifier')}
+          style={{
+            background: activeTab === 'verifier' ? 'var(--acc)' : 'var(--card)',
+            color: activeTab === 'verifier' ? '#fff' : 'var(--ink)',
+            border: '1px solid var(--line)',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            cursor: 'pointer',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <Key className="w-4 h-4" /> Verifier API ({verifierApiKey ? 'Configured' : 'Unset'})
         </button>
 
         <button
@@ -1248,6 +1318,158 @@ export default function SettingsPage() {
                 />
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4.5: VERIFIER MICROSERVICE INTEGRATION */}
+      {activeTab === 'verifier' && (
+        <div style={{ background: 'var(--card)', border: '1px solid var(--line)', padding: '1.75rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldCheck style={{ width: '20px', height: '20px', color: 'var(--acc)' }} />
+                <h2 style={{ fontSize: '18px', margin: 0, color: 'var(--ink)' }}>Autonomous Verifier Integration</h2>
+              </div>
+              <p style={{ color: 'var(--mut)', fontSize: '13px', margin: '4px 0 0' }}>
+                Connect MentalWeg to your standalone Verifier service to automatically validate Telebirr and CBE patient scheduling fees.
+              </p>
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                background: 'var(--acc)',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 18px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {saving ? 'Saving...' : 'Save API Settings'}
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
+            {/* Service URL */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
+                Verifier Microservice Base URL
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="url"
+                  value={verifierBaseUrl}
+                  onChange={e => setVerifierBaseUrl(e.target.value)}
+                  placeholder="https://verifier.senaycreatives.org"
+                  className="admin-input"
+                  style={{ width: '100%', paddingRight: '40px' }}
+                />
+                <a
+                  href={verifierBaseUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ position: 'absolute', right: '12px', color: 'var(--mut)', cursor: 'pointer' }}
+                  title="Open Verifier in new tab"
+                >
+                  <ExternalLink style={{ width: '16px', height: '16px' }} />
+                </a>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--mut)', display: 'block', marginTop: '4px' }}>
+                The canonical host URL for the standalone Verifier instance.
+              </span>
+            </div>
+
+            {/* API Key */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginBottom: '6px' }}>
+                Verifier Application API Key
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={verifierApiKey}
+                  onChange={e => setVerifierApiKey(e.target.value)}
+                  placeholder="Paste your Verifier API key (key_... or secret)"
+                  className="admin-input"
+                  style={{ width: '100%', paddingRight: '40px', fontFamily: 'monospace' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  style={{ position: 'absolute', right: '10px', background: 'none', border: 'none', color: 'var(--mut)', cursor: 'pointer' }}
+                  title={showApiKey ? 'Hide API key' : 'Show API key'}
+                >
+                  {showApiKey ? <EyeOff style={{ width: '16px', height: '16px' }} /> : <Eye style={{ width: '16px', height: '16px' }} />}
+                </button>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--mut)', display: 'block', marginTop: '4px' }}>
+                Generate or retrieve this key from your Verifier Admin Console (/admin).
+              </span>
+            </div>
+          </div>
+
+          {/* Connection Test Section */}
+          <div style={{ background: 'var(--off)', border: '1px solid var(--line)', borderRadius: '10px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <h4 style={{ margin: '0 0 4px', fontSize: '14px', color: 'var(--ink)' }}>Live Connection & Auth Probe</h4>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--mut)' }}>
+                  Sends a real-time verification handshake to ensure MentalWeg can authenticate payments.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestVerifier}
+                disabled={testingVerifier}
+                style={{
+                  background: 'var(--card)',
+                  color: 'var(--ink)',
+                  border: '1px solid var(--line)',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Zap style={{ width: '15px', height: '15px', color: 'var(--acc)' }} />
+                {testingVerifier ? 'Probing...' : 'Test Connection'}
+              </button>
+            </div>
+
+            {verifierTestResult && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: verifierTestResult.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                  border: `1px solid ${verifierTestResult.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                  color: verifierTestResult.success ? '#10b981' : '#ef4444'
+                }}
+              >
+                {verifierTestResult.success ? (
+                  <CheckCircle2 style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                ) : (
+                  <XCircle style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                )}
+                <span>{verifierTestResult.message}</span>
+              </div>
+            )}
           </div>
         </div>
       )}

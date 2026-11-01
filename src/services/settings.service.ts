@@ -102,7 +102,9 @@ export const SettingsSchema = z.object({
       instructions: 'Transfer through Commercial Bank of Ethiopia (CBE Birr / CBE Mobile) and attach slip.',
       active: true,
     }
-  ])
+  ]),
+  verifierBaseUrl: z.string().default('https://verifier.senaycreatives.org'),
+  verifierApiKey: z.string().default(''),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;

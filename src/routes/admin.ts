@@ -44,6 +44,72 @@ export async function adminRoutes(app: FastifyInstance) {
   app.put('/api/admin/settings', handleUpdateSettings);
   app.patch('/api/admin/settings', handleUpdateSettings);
 
+  // Verifier Microservice Connection & API Key Probe
+  app.post('/api/admin/verifier/test', async (req, reply) => {
+    const { baseUrl, apiKey } = (req.body as any) || {};
+    const settings = await getSettings().catch(() => null);
+    const targetUrl = (baseUrl || settings?.verifierBaseUrl || env.VERIFIER_BASE_URL || 'https://verifier.senaycreatives.org').replace(/\/+$/, '');
+    const key = (apiKey !== undefined ? apiKey : (settings?.verifierApiKey || env.VERIFIER_API_KEY || '')).trim();
+
+    const start = performance.now();
+    try {
+      // 1. Ping health check
+      const healthRes = await fetch(`${targetUrl}/health`, { signal: AbortSignal.timeout(5000) });
+      const latencyMs = Math.round(performance.now() - start);
+
+      if (!healthRes.ok) {
+        return reply.status(502).send({
+          success: false,
+          latencyMs,
+          error: `Verifier health endpoint responded with HTTP ${healthRes.status}.`
+        });
+      }
+
+      // 2. Validate API Key authorization via mock verification
+      const verifyRes = await fetch(`${targetUrl}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key
+        },
+        body: JSON.stringify({ reference: 'TEST12345678' }),
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (verifyRes.status === 401 || verifyRes.status === 403) {
+        return reply.status(401).send({
+          success: false,
+          latencyMs,
+          error: 'Verifier rejected the API key (HTTP 401/403). Please verify the key is valid and active.'
+        });
+      }
+
+      if (!verifyRes.ok) {
+        const errorText = await verifyRes.text().catch(() => '');
+        return reply.status(502).send({
+          success: false,
+          latencyMs,
+          error: `Verifier endpoint returned HTTP ${verifyRes.status}: ${errorText || 'Unknown error'}`
+        });
+      }
+
+      const verifyData = await verifyRes.json();
+      return {
+        success: true,
+        latencyMs,
+        url: targetUrl,
+        keyAuthorized: true,
+        message: 'Successfully connected and authenticated with Verifier microservice!',
+        details: verifyData
+      };
+    } catch (err: any) {
+      return reply.status(502).send({
+        success: false,
+        error: `Failed to reach Verifier at ${targetUrl}: ${err.message || 'Connection timed out or network error'}`
+      });
+    }
+  });
+
   // 2. Sessions & Calendar
   app.get('/api/admin/sessions', async (req, reply) => {
     const schema = z.object({
