@@ -37,6 +37,19 @@
   --card-bg-subtle: #f8faf9;
   --nav-bg: rgba(251, 250, 248, 0.88);
   --input-bg: #ffffff;
+
+  /* Button Tokens */
+  --btn-forest-top: #214335;
+  --btn-forest-bottom: #142a21;
+  --btn-forest-hover-top: #295744;
+  --btn-forest-hover-bottom: #1a382c;
+  --btn-squircle-radius: 13px;
+  --btn-tile-radius: 11px;
+  --btn-pill-radius: 9999px;
+  --btn-coin-radius: 50%;
+  --btn-rim-light: inset 0 1px 0 rgba(255, 255, 255, 0.24), inset 0 -1px 0 rgba(0, 0, 0, 0.28);
+  --btn-shadow-primary: 0 1px 2px rgba(15, 28, 23, 0.08), 0 8px 22px -4px rgba(15, 28, 23, 0.24);
+  --btn-shadow-primary-hover: 0 3px 6px rgba(15, 28, 23, 0.12), 0 14px 28px -4px rgba(25, 60, 48, 0.32);
 }
 
 :root[data-theme="dark"],
@@ -69,6 +82,15 @@
   --card-bg-subtle: #101c16;
   --nav-bg: rgba(13, 21, 18, 0.92);
   --input-bg: #111d17;
+
+  /* Button Tokens Dark Mode */
+  --btn-forest-top: #2d6653;
+  --btn-forest-bottom: #1e4537;
+  --btn-forest-hover-top: #367b64;
+  --btn-forest-hover-bottom: #245544;
+  --btn-rim-light: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  --btn-shadow-primary: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px -4px rgba(0, 0, 0, 0.55);
+  --btn-shadow-primary-hover: 0 4px 8px rgba(0, 0, 0, 0.35), 0 16px 32px -4px rgba(45, 102, 83, 0.45);
 }
 
 /* 1. ROCK-SOLID AMBIENT BACKDROP (NEVER MOVES OR ROLLS AWAY) */
@@ -3317,15 +3339,46 @@ html:has(.landing-viewport-wrap) {
   margin-bottom: 1rem;
 }
 
+.confirmation-icon-wrap svg,
+.text-emerald {
+  color: var(--emerald-600);
+}
+
+[data-theme="dark"] .confirmation-icon-wrap svg,
+[data-theme="dark"] .text-emerald {
+  color: var(--emerald-400);
+}
+
 .status-badge-chip {
-  display: inline-block;
-  background: var(--emerald-100);
-  color: var(--forest-800);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: #eef7f3;
+  color: #1b4d3e;
+  border: 1px solid rgba(33, 112, 92, 0.22);
   font-weight: 700;
   font-size: 0.85rem;
-  padding: 0.35rem 1rem;
-  border-radius: 9999px;
+  padding: 0.42rem 1.15rem;
+  border-radius: var(--btn-pill-radius, 9999px);
   margin-bottom: 1.25rem;
+  box-shadow: 0 1px 3px rgba(20, 36, 30, 0.05);
+}
+
+.status-badge-chip svg {
+  color: #21705c;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .status-badge-chip {
+  background: rgba(45, 102, 83, 0.28);
+  border: 1px solid rgba(109, 216, 179, 0.35);
+  color: #6dd8b3;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .status-badge-chip svg {
+  color: #6dd8b3;
 }
 
 .confirmation-card h2 {
@@ -3379,6 +3432,10 @@ html:has(.landing-viewport-wrap) {
   color: var(--emerald-600);
 }
 
+[data-theme="dark"] .eth-sub {
+  color: var(--emerald-400);
+}
+
 .meta-secondary {
   display: block;
   font-size: 0.82rem;
@@ -3399,6 +3456,16 @@ html:has(.landing-viewport-wrap) {
   gap: 1rem;
 }
 
+.instruction-item svg {
+  flex-shrink: 0;
+  color: var(--emerald-600);
+  margin-top: 0.15rem;
+}
+
+[data-theme="dark"] .instruction-item svg {
+  color: var(--emerald-400);
+}
+
 .instruction-item strong {
   display: block;
   font-size: 0.95rem;
@@ -3415,18 +3482,126 @@ html:has(.landing-viewport-wrap) {
 
 .confirmation-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
   gap: 1rem;
+  width: 100%;
+}
+
+.confirmation-actions > button {
+  flex: 1;
+  min-height: 50px;
 }
 
 .btn-calendar-download {
-  background: var(--sand-100);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: #ffffff;
   color: var(--forest-900);
-  border: 1px solid var(--border-medium);
-  padding: 0.9rem;
-  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-medium);
+  padding: 0.85rem 1.6rem;
+  min-height: 50px;
+  border-radius: var(--btn-squircle-radius, 13px);
   font-weight: 600;
+  font-size: 0.95rem;
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(20, 36, 30, 0.05);
+  transition: transform 0.22s var(--ease-snappy, ease), box-shadow 0.22s ease, border-color 0.22s ease, background 0.22s ease, color 0.22s ease;
+  user-select: none;
+}
+
+.btn-calendar-download:hover {
+  background: var(--sand-100);
+  border-color: var(--emerald-600);
+  color: var(--emerald-600);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(20, 36, 30, 0.08);
+}
+
+.btn-calendar-download:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(20, 36, 30, 0.06);
+}
+
+.confirmation-actions .btn-primary,
+.btn-confirm-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: linear-gradient(180deg, var(--btn-forest-top) 0%, var(--btn-forest-bottom) 100%);
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 0.85rem 1.6rem;
+  min-height: 50px;
+  border-radius: var(--btn-squircle-radius, 13px);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: var(--btn-rim-light), var(--btn-shadow-primary);
+  transition: transform 0.22s var(--ease-snappy, ease), box-shadow 0.22s ease, background 0.22s ease;
+  user-select: none;
+}
+
+.confirmation-actions .btn-primary:hover,
+.btn-confirm-home:hover {
+  background: linear-gradient(180deg, var(--btn-forest-hover-top) 0%, var(--btn-forest-hover-bottom) 100%);
+  transform: translateY(-1.5px);
+  box-shadow: var(--btn-rim-light), var(--btn-shadow-primary-hover);
+}
+
+.confirmation-actions .btn-primary:active,
+.btn-confirm-home:active {
+  transform: translateY(1.5px) scale(0.985);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .btn-calendar-download {
+  background: rgba(255, 255, 255, 0.07);
+  color: #f4f6f5;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .btn-calendar-download:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #6dd8b3;
+  color: #6dd8b3;
+  transform: translateY(-1.5px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 14px rgba(109, 216, 179, 0.25);
+}
+
+[data-theme="dark"] .btn-calendar-download:active {
+  background: rgba(255, 255, 255, 0.09);
+  transform: translateY(1px);
+}
+
+[data-theme="dark"] .confirmation-actions .btn-primary,
+[data-theme="dark"] .btn-confirm-home {
+  background: linear-gradient(180deg, var(--btn-forest-top) 0%, var(--btn-forest-bottom) 100%);
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: var(--btn-rim-light), 0 4px 16px rgba(0, 0, 0, 0.45), 0 0 16px rgba(45, 102, 83, 0.3);
+}
+
+[data-theme="dark"] .confirmation-actions .btn-primary:hover,
+[data-theme="dark"] .btn-confirm-home:hover {
+  background: linear-gradient(180deg, var(--btn-forest-hover-top) 0%, var(--btn-forest-hover-bottom) 100%);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-1.5px);
+  box-shadow: var(--btn-rim-light), 0 6px 20px rgba(0, 0, 0, 0.55), 0 0 22px rgba(54, 123, 100, 0.45);
+}
+
+@media (max-width: 640px) {
+  .confirmation-actions {
+    flex-direction: column;
+  }
+  .confirmation-actions > button {
+    width: 100%;
+  }
 }
 
 /* RESPONSIVE BREAKPOINTS */
@@ -3665,7 +3840,6 @@ html:has(.landing-viewport-wrap) {
 [data-theme="dark"] .payment-instructions-card,
 [data-theme="dark"] .booking-form-card,
 [data-theme="dark"] .confirmation-card,
-[data-theme="dark"] .confirmation-meta-box,
 [data-theme="dark"] .poster-modal-card {
   background: var(--card-bg);
   border-color: var(--border-subtle);
@@ -3676,6 +3850,7 @@ html:has(.landing-viewport-wrap) {
 [data-theme="dark"] .convention-sample-box,
 [data-theme="dark"] .account-details-box,
 [data-theme="dark"] .acc-extra-info,
+[data-theme="dark"] .confirmation-meta-box,
 [data-theme="dark"] .screenshot-preview-box {
   background: var(--card-bg-subtle);
   border-color: var(--border-subtle);
@@ -3718,8 +3893,7 @@ html:has(.landing-viewport-wrap) {
 [data-theme="dark"] .tab-btn,
 [data-theme="dark"] .provider-tab-btn,
 [data-theme="dark"] .btn-banner-action,
-[data-theme="dark"] .poster-tab-btn,
-[data-theme="dark"] .btn-calendar-download {
+[data-theme="dark"] .poster-tab-btn {
   background: rgba(24, 41, 34, 0.85);
   color: var(--forest-900);
   border-color: rgba(255, 255, 255, 0.14);
@@ -3731,8 +3905,7 @@ html:has(.landing-viewport-wrap) {
 [data-theme="dark"] .tab-btn:hover:not(.active),
 [data-theme="dark"] .provider-tab-btn:hover:not(.active),
 [data-theme="dark"] .btn-banner-action:hover,
-[data-theme="dark"] .poster-tab-btn:hover:not(.active),
-[data-theme="dark"] .btn-calendar-download:hover {
+[data-theme="dark"] .poster-tab-btn:hover:not(.active) {
   background: rgba(33, 56, 46, 0.95);
   border-color: var(--emerald-500);
   color: #6dd8b3;
@@ -3792,6 +3965,12 @@ html:has(.landing-viewport-wrap) {
   background: var(--card-bg-elevated);
   color: var(--forest-900);
   border-color: var(--border-subtle);
+}
+
+[data-theme="dark"] .convention-inline-switch-btn:hover {
+  background: var(--sand-200);
+  border-color: var(--emerald-400);
+  color: var(--emerald-400);
 }
 
 [data-theme="dark"] .nav-exit-sanctuary-btn {
