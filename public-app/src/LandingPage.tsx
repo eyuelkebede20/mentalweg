@@ -18,7 +18,8 @@ import {
   Download,
   FileDown,
   LogIn,
-  User
+  User,
+  Menu
 } from 'lucide-react';
 import './LandingPage.css';
 import { useAppVersion } from './utils/useAppVersion';
@@ -122,6 +123,7 @@ export default function LandingPage({
   const [scrollDirection, setScrollDirection] = useState<'down' | 'up'>('down');
   const [activePosterTab, setActivePosterTab] = useState<'latest' | 'previous'>('latest');
   const [selectedPoster, setSelectedPoster] = useState<Poster | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   // Blog and clinical materials states
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -431,6 +433,11 @@ export default function LandingPage({
         return;
       }
 
+      if (e.key === 'Escape' && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+        return;
+      }
+
       if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
         if (activeStepRef.current < STAGES.length - 1) {
           e.preventDefault();
@@ -452,7 +459,7 @@ export default function LandingPage({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToStep]);
+  }, [goToStep, mobileMenuOpen]);
 
   return (
     <div className="landing-viewport-wrap" data-theme={theme}>
@@ -508,7 +515,8 @@ export default function LandingPage({
           </div>
         </button>
 
-        <div className="nav-right-cluster">
+        {/* Desktop cluster: clean, balanced layout on desktop */}
+        <div className="nav-right-cluster nav-desktop-cluster">
           {/* Patient Portal / Login button */}
           {(onOpenLogin || onOpenPortal) && (
             <button
@@ -558,7 +566,143 @@ export default function LandingPage({
             Book an Appointment
           </button>
         </div>
+
+        {/* Mobile cluster: exactly 3 balanced touch targets (Theme + Book + Menu) */}
+        <div className="nav-right-cluster nav-mobile-cluster">
+          {onToggleTheme && (
+            <button
+              type="button"
+              className="theme-toggle-btn mobile-theme-btn"
+              onClick={onToggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          )}
+
+          <button type="button" className="nav-cta-btn mobile-cta-btn" onClick={onBook}>
+            Book
+          </button>
+
+          <button
+            type="button"
+            className="mobile-menu-toggle-btn"
+            onClick={() => setMobileMenuOpen(prev => !prev)}
+            aria-expanded={mobileMenuOpen}
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
+
+      {/* MOBILE NAVIGATION DRAWER & BACKDROP */}
+      {mobileMenuOpen && (
+        <div 
+          className="mobile-nav-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <div 
+        className={`mobile-nav-drawer ${mobileMenuOpen ? 'open' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Mobile Navigation Menu"
+      >
+        <div className="mobile-drawer-header">
+          <div className="mobile-drawer-brand">
+            <span className="drawer-brand-name">{config.practiceName || 'Mentalweg'}</span>
+            <span className="drawer-brand-sub">Clinical Psychology · Addis Ababa</span>
+          </div>
+          <button
+            type="button"
+            className="mobile-drawer-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="mobile-drawer-body">
+          <nav className="mobile-drawer-nav" aria-label="Section shortcuts">
+            <span className="drawer-section-heading">Sections</span>
+            {STAGES.map((stg, i) => (
+              <button
+                key={stg.id}
+                type="button"
+                className={`drawer-nav-item ${activeStep === i ? 'active' : ''}`}
+                onClick={() => {
+                  goToStep(i);
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <span className="drawer-item-num">{stg.short}</span>
+                <span className="drawer-item-label">{stg.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="mobile-drawer-quick-actions">
+            {(onOpenLogin || onOpenPortal) && (
+              <button
+                type="button"
+                className="drawer-action-btn portal-btn"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (patientUser) {
+                    onOpenPortal?.();
+                  } else {
+                    onOpenLogin?.();
+                  }
+                }}
+              >
+                {patientUser ? <User className="w-4 h-4 text-emerald" /> : <LogIn className="w-4 h-4 text-emerald" />}
+                <span>{patientUser ? (patientUser.displayName ? `Account (${patientUser.displayName.split(' ')[0]})` : 'My Patient Portal') : 'Sign In to Patient Portal'}</span>
+              </button>
+            )}
+
+            {canInstall && (
+              <button
+                type="button"
+                className="drawer-action-btn install-btn"
+                onClick={async () => {
+                  setMobileMenuOpen(false);
+                  const res = await promptInstall();
+                  if (res === 'ios') {
+                    setShowIosTip(true);
+                    setTimeout(() => setShowIosTip(false), 8000);
+                  }
+                }}
+              >
+                <Download className="w-4 h-4 text-emerald" />
+                <span>Install Mobile App</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="btn-primary-action drawer-book-btn"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onBook();
+              }}
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              <span>Book Consultation</span>
+            </button>
+          </div>
+
+          <div className="mobile-drawer-footer">
+            <p className="drawer-location-tag">
+              <MapPin className="w-3.5 h-3.5 inline mr-1 text-emerald" />
+              {config.locationText || 'Bulgaria area, Addis Ababa'}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* 3. SANCTUARY STAGES VIEWPORT */}
       <main className={`landing-stage-viewport scroll-dir-${scrollDirection}`}>
@@ -604,22 +748,12 @@ export default function LandingPage({
                 <Calendar className="w-5 h-5" />
                 <span>Book Now (1-Hour Session)</span>
               </button>
-              {(onOpenLogin || onOpenPortal) && (
-                <button
-                  type="button"
-                  className="btn-secondary-action"
-                  onClick={patientUser ? onOpenPortal : onOpenLogin}
-                >
-                  {patientUser ? <User className="w-4 h-4 text-emerald" /> : <LogIn className="w-4 h-4 text-emerald" />}
-                  <span>{patientUser ? 'My Patient Portal' : 'Patient Portal & Login'}</span>
-                </button>
-              )}
               <button
                 type="button"
                 className="btn-secondary-action"
                 onClick={() => goToStep(1)}
               >
-                <span>Explore Clinical Ethos</span>
+                <span>Explore Practice & Ethos</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
             </div>
@@ -671,15 +805,7 @@ export default function LandingPage({
 
               <div className="stage-step-actions">
                 <button type="button" className="btn-primary-action" onClick={onBook}>
-                  Reserve with Dr. Hana
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary-action"
-                  onClick={() => goToStep(2)}
-                >
-                  <span>View Workshops Archive</span>
-                  <ChevronDown className="w-4 h-4" />
+                  Reserve Consultation with Dr. Hana
                 </button>
               </div>
             </div>
@@ -765,17 +891,6 @@ export default function LandingPage({
                 ))
               )}
             </div>
-
-            <div className="stage-step-actions text-center mt-4">
-              <button
-                type="button"
-                className="btn-secondary-action"
-                onClick={() => goToStep(3)}
-              >
-                <span>Next: Articles & Insights</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </article>
 
@@ -860,17 +975,6 @@ export default function LandingPage({
                 ))
               )}
             </div>
-
-            <div className="stage-step-actions text-center mt-4">
-              <button
-                type="button"
-                className="btn-secondary-action"
-                onClick={() => goToStep(4)}
-              >
-                <span>Next: Clinical Tools & Downloads</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </article>
 
@@ -949,17 +1053,6 @@ export default function LandingPage({
                 ))
               )}
             </div>
-
-            <div className="stage-step-actions text-center mt-4">
-              <button
-                type="button"
-                className="btn-secondary-action"
-                onClick={() => goToStep(5)}
-              >
-                <span>Next: In-Person Sanctuary Details</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </article>
 
@@ -1023,17 +1116,6 @@ export default function LandingPage({
               </div>
               <button type="button" className="btn-banner-action" onClick={onBook}>
                 Select Consultation Time
-              </button>
-            </div>
-
-            <div className="stage-step-actions text-center mt-3">
-              <button
-                type="button"
-                className="btn-secondary-action"
-                onClick={() => goToStep(6)}
-              >
-                <span>Next: Care Support & Booking</span>
-                <ChevronDown className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -1145,59 +1227,13 @@ export default function LandingPage({
               <span className="rail-node-label">
                 <span className="rail-num">{stage.short}</span>
                 <span className="rail-text">{stage.label}</span>
-                <span className="rail-rel-pos">
-                  {isPassed ? 'Above ↑' : isUpcoming ? 'Below ↓' : 'Current'}
-                </span>
               </span>
             </button>
           );
         })}
       </nav>
 
-      {/* 6. BOTTOM STAGE NAVIGATION & DIRECTIONAL CUES */}
-      <div className="stage-bottom-hint">
-        {activeStep > 0 && (
-          <button
-            type="button"
-            className="bottom-hint-btn hint-prev-btn"
-            onClick={() => goToStep(activeStep - 1)}
-            aria-label={`Scroll up to ${STAGES[activeStep - 1].label}`}
-            title={`Above: ${STAGES[activeStep - 1].label}`}
-          >
-            <ArrowUp className="w-3.5 h-3.5" />
-            <span>Above: {STAGES[activeStep - 1].label}</span>
-          </button>
-        )}
-
-        {activeStep < STAGES.length - 1 ? (
-          <button
-            type="button"
-            className="bottom-hint-btn hint-next-btn"
-            onClick={() => goToStep(activeStep + 1)}
-            aria-label={`Scroll down to ${STAGES[activeStep + 1].label}`}
-            title={`Below: ${STAGES[activeStep + 1].label}`}
-          >
-            <span>
-              {activeStep === 0
-                ? 'Scroll down to explore'
-                : `Below: ${STAGES[activeStep + 1].label}`}
-            </span>
-            <ChevronDown className="w-4 h-4 hint-chevron-down" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="bottom-hint-btn hint-top-btn"
-            onClick={() => goToStep(0)}
-            aria-label="Scroll back up to beginning"
-          >
-            <ArrowUp className="w-4 h-4" />
-            <span>Return to Sanctuary Top</span>
-          </button>
-        )}
-      </div>
-
-      {/* 7. POSTER DETAIL MODAL OVERLAY */}
+      {/* 6. POSTER DETAIL MODAL OVERLAY */}
       {selectedPoster && (
         <div
           ref={posterModalRef}
